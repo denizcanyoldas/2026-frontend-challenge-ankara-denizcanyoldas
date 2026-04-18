@@ -9,8 +9,13 @@
   --navy-900: #0b1d3a;
   --navy-700: #13306b;
   --navy-500: #1e4fbf;
+  --navy-400: #3b74e6;
   --orange-500: #ff7a1a;
   --orange-300: #ffb070;
+  --orange-600: #ea5a0c;
+  --yellow-400: #ffc93a;
+  --cyan-400: #28c1ff;
+  --magenta-400: #ff4d9d;
 
   --card: #ffffff;
   --card-border: rgba(11, 29, 58, 0.08);
@@ -18,6 +23,7 @@
 
   --shadow: 0 18px 40px rgba(11, 29, 58, 0.08);
   --shadow-sm: 0 8px 20px rgba(11, 29, 58, 0.06);
+  --shadow-glow-orange: 0 20px 50px rgba(255, 122, 26, 0.35);
 
   --radius: 18px;
   --radius-sm: 12px;
@@ -30,10 +36,29 @@
     #1e4fbf 75%,
     #ff7a1a 110%
   );
+  /* A wider, richer gradient that can be slid underneath the hero to give
+     a subtle "living" feel. Background-size is set to >100% so the pan
+     animation has room to move. */
+  --hero-gradient-animated: linear-gradient(
+    120deg,
+    #0b1d3a 0%,
+    #13306b 20%,
+    #1e4fbf 40%,
+    #3b74e6 55%,
+    #ff7a1a 75%,
+    #ffc93a 90%,
+    #13306b 100%
+  );
   --accent-gradient: linear-gradient(
     90deg,
     var(--navy-700) 0%,
     var(--orange-500) 100%
+  );
+  --chip-gradient: linear-gradient(
+    90deg,
+    var(--navy-500),
+    var(--orange-500),
+    var(--yellow-400)
   );
 }
 
@@ -110,4 +135,280 @@ body {
   background: transparent;
   border: none;
   filter: drop-shadow(0 3px 6px rgba(11, 29, 58, 0.28));
+}
+
+/* ========================================================================
+   Motion toolkit
+   Keep the app feeling alive without getting distracting. Each animation
+   is subtle and gated by prefers-reduced-motion.
+   ======================================================================== */
+
+@keyframes gradient-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+@keyframes float-blob {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(14px, -22px, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes shimmer-move {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 12px 36px rgba(255, 122, 26, 0.18),
+      0 0 0 0 rgba(255, 122, 26, 0.35);
+  }
+  50% {
+    box-shadow: 0 18px 46px rgba(255, 122, 26, 0.28),
+      0 0 0 10px rgba(255, 122, 26, 0);
+  }
+}
+
+@keyframes live-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sparkle {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(12deg) scale(1.12);
+  }
+}
+
+/* Animated hero gradient. Wider-than-100% size gives room to pan. */
+.hero-gradient-animated {
+  background-image: var(--hero-gradient-animated);
+  background-size: 220% 220%;
+  animation: gradient-pan 18s ease-in-out infinite;
+}
+
+/* Decorative floating blobs that live inside the hero section. They
+   should always be inside a `position: relative` parent with
+   `overflow: hidden` to stay bounded. */
+.floating-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(38px);
+  opacity: 0.55;
+  pointer-events: none;
+  will-change: transform;
+  animation: float-blob 12s ease-in-out infinite;
+}
+
+.floating-orb--sun {
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgba(255, 201, 58, 0.95),
+    rgba(255, 122, 26, 0.4) 60%,
+    transparent 75%
+  );
+}
+
+.floating-orb--sky {
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgba(40, 193, 255, 0.7),
+    rgba(30, 79, 191, 0.35) 60%,
+    transparent 75%
+  );
+}
+
+.floating-orb--rose {
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgba(255, 77, 157, 0.7),
+    rgba(255, 122, 26, 0.25) 60%,
+    transparent 75%
+  );
+}
+
+/* Shimmer sweep — intended to be overlaid inside a relatively positioned
+   parent. The inner span is translated from left to right on loop. */
+.shimmer-track {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  transform: translateX(-120%);
+  animation: shimmer-move 2.6s linear infinite;
+  pointer-events: none;
+}
+
+/* Soft continuous glow around the prime-suspect card. */
+.animate-glow {
+  animation: glow-pulse 2.8s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float-soft 4.5s ease-in-out infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle 2.4s ease-in-out infinite;
+}
+
+/* A tiny, perpetually pulsing dot — for "LIVE" indicators. */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--orange-500);
+  box-shadow: 0 0 0 0 rgba(255, 122, 26, 0.55);
+  animation: live-dot 1.6s ease-in-out infinite;
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 122, 26, 0.35);
+  animation: live-dot 1.6s ease-out infinite;
+}
+
+/* Stagger helper: apply .stagger-pop to a parent, and each direct child
+   pops in sequentially. Keeps markup simple for lists. */
+.stagger-pop > * {
+  animation: pop-in 0.45s ease-out both;
+}
+.stagger-pop > *:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.stagger-pop > *:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.stagger-pop > *:nth-child(3) {
+  animation-delay: 0.14s;
+}
+.stagger-pop > *:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.stagger-pop > *:nth-child(5) {
+  animation-delay: 0.26s;
+}
+.stagger-pop > *:nth-child(6) {
+  animation-delay: 0.32s;
+}
+.stagger-pop > *:nth-child(7) {
+  animation-delay: 0.38s;
+}
+.stagger-pop > *:nth-child(8) {
+  animation-delay: 0.44s;
+}
+.stagger-pop > *:nth-child(n + 9) {
+  animation-delay: 0.5s;
+}
+
+/* Card lift on hover — shared interaction polish. */
+.card-lift {
+  transition:
+    transform 260ms ease,
+    box-shadow 260ms ease,
+    border-color 260ms ease;
+}
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+/* Thin color accent rail — used on source stat cards. */
+.source-accent {
+  position: relative;
+}
+.source-accent::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: var(--accent, var(--accent-gradient));
+  opacity: 0.85;
+}
+
+/* Honor the user's motion preferences. Disable anything that moves the
+   pixels around; keep colors intact. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-gradient-animated,
+  .floating-orb,
+  .shimmer-track::after,
+  .animate-glow,
+  .animate-float,
+  .animate-sparkle,
+  .live-dot,
+  .live-dot::after,
+  .stagger-pop > * {
+    animation: none !important;
+  }
+  .card-lift {
+    transition: none !important;
+  }
 }

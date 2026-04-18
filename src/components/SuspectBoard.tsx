@@ -204,7 +204,7 @@ function SuspectCard({
   return (
     <div
       className={[
-        "rounded-2xl border bg-white shadow-[var(--shadow-sm)] transition",
+        "card-lift rounded-2xl border bg-white shadow-[var(--shadow-sm)]",
         rank === 1
           ? "border-[rgba(255,122,26,0.45)] ring-1 ring-[rgba(255,122,26,0.25)]"
           : "border-[var(--card-border)]",
@@ -252,12 +252,15 @@ function SuspectCard({
               aria-label={`${suspect.personLabel} suspicion ${pct}%`}
             >
               <div
-                className="h-full rounded-full transition-[width] duration-500"
+                className={[
+                  "h-full rounded-full transition-[width] duration-700",
+                  rank === 1 ? "shimmer-track" : "",
+                ].join(" ")}
                 style={{
                   width: `${Math.max(pct, 4)}%`,
                   backgroundImage:
                     rank === 1
-                      ? "linear-gradient(90deg, #ff7a1a, #ff4d4f)"
+                      ? "linear-gradient(90deg, #ff7a1a, #ffc93a, #ff4d4f)"
                       : `linear-gradient(90deg, ${color}, ${color})`,
                 }}
               />
@@ -352,24 +355,62 @@ export function SuspectBoard({
   return (
     <div className="space-y-4">
       {/* Prime suspect hero */}
-      <div className="relative overflow-hidden rounded-[var(--radius)] border border-[rgba(255,122,26,0.4)] bg-gradient-to-br from-[#fff7f0] via-white to-[#f7f9ff] shadow-[var(--shadow)]">
+      <div className="animate-glow relative overflow-hidden rounded-[var(--radius)] border border-[rgba(255,122,26,0.4)] bg-gradient-to-br from-[#fff7f0] via-white to-[#f7f9ff]">
+        {/* Soft gradient blobs to make the card feel alive. */}
+        <span
+          aria-hidden
+          className="floating-orb floating-orb--sun pointer-events-none absolute -right-24 -top-24"
+          style={{ width: 260, height: 260, animationDuration: "13s" }}
+        />
+        <span
+          aria-hidden
+          className="floating-orb floating-orb--rose pointer-events-none absolute -bottom-20 left-1/3"
+          style={{
+            width: 180,
+            height: 180,
+            animationDuration: "15s",
+            animationDelay: "-4s",
+            opacity: 0.35,
+          }}
+        />
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full opacity-40 blur-3xl"
+          className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full opacity-30 blur-3xl"
           style={{ background: primeColor }}
         />
+
         <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-5 sm:p-6">
-          <div
-            className="grid size-16 shrink-0 place-items-center rounded-2xl text-xl font-bold text-white shadow-[var(--shadow)]"
-            style={{ backgroundColor: primeColor }}
-            aria-hidden
-          >
-            {initials(prime.personLabel)}
+          <div className="relative shrink-0">
+            <div
+              className="animate-float grid size-16 place-items-center rounded-2xl text-xl font-bold text-white shadow-[var(--shadow)] ring-2 ring-white/70"
+              style={{ backgroundColor: primeColor }}
+              aria-hidden
+            >
+              {initials(prime.personLabel)}
+            </div>
+            {/* Sparkle flare — pure CSS star drawn with radial gradient. */}
+            <span
+              aria-hidden
+              className="animate-sparkle pointer-events-none absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full text-xs text-white"
+              style={{
+                background:
+                  "radial-gradient(circle at 30% 30%, #fff, #ffc93a 50%, #ff7a1a 100%)",
+                boxShadow: "0 0 12px rgba(255,201,58,0.75)",
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden>
+                <path
+                  d="M12 2l2.39 5.26L20 8l-4.5 3.85L17 18l-5-3-5 3 1.5-6.15L4 8l5.61-.74L12 2z"
+                  fill="#fff"
+                />
+              </svg>
+            </span>
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="orange">Prime suspect</Badge>
-              <span className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#b2530f] shadow-[var(--shadow-sm)]">
+                <span className="live-dot" aria-hidden />
                 {primeLabel}
               </span>
             </div>
@@ -390,7 +431,13 @@ export function SuspectBoard({
           </div>
           <div className="flex items-end gap-3 sm:flex-col sm:items-end">
             <div className="text-right">
-              <div className="text-4xl font-bold leading-none text-[var(--navy-900)] sm:text-5xl">
+              <div
+                className="bg-clip-text text-4xl font-bold leading-none text-transparent sm:text-5xl"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(90deg, #ff4d4f 0%, #ff7a1a 55%, #ffc93a 100%)",
+                }}
+              >
                 {prime.totalScore}
               </div>
               <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--muted)]">
@@ -401,7 +448,7 @@ export function SuspectBoard({
               <button
                 type="button"
                 onClick={() => onSelectSuspect(prime.personKey)}
-                className="rounded-xl border border-[rgba(255,122,26,0.35)] bg-white px-3 py-1.5 text-xs font-semibold text-[#b2530f] shadow-[var(--shadow-sm)] hover:bg-[rgba(255,122,26,0.05)]"
+                className="card-lift rounded-xl border border-[rgba(255,122,26,0.35)] bg-white px-3 py-1.5 text-xs font-semibold text-[#b2530f] shadow-[var(--shadow-sm)] hover:bg-[rgba(255,122,26,0.05)]"
               >
                 Focus on map →
               </button>
@@ -411,7 +458,7 @@ export function SuspectBoard({
       </div>
 
       {/* Full ranked list */}
-      <div className="space-y-2">
+      <div className="stagger-pop space-y-2">
         {suspects.map((s, idx) => (
           <SuspectCard
             key={s.personKey}

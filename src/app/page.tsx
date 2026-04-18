@@ -47,6 +47,16 @@ const SOURCE_LABEL: Record<SourceKind, string> = {
   anon_tips: "Anonymous Tips",
 };
 
+// Each source gets a subtle accent rail on top of its stat card so the
+// five-up grid reads as a little spectrum instead of a flat row.
+const SOURCE_ACCENT: Record<SourceKind, string> = {
+  checkins: "linear-gradient(90deg, #1e4fbf, #28c1ff)",
+  messages: "linear-gradient(90deg, #13306b, #3b74e6)",
+  sightings: "linear-gradient(90deg, #ff7a1a, #ffc93a)",
+  personal_notes: "linear-gradient(90deg, #0b1d3a, #13306b)",
+  anon_tips: "linear-gradient(90deg, #ff4d9d, #ff7a1a)",
+};
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -315,7 +325,7 @@ export default function Home() {
       <header className="sticky top-0 z-[1100] border-b border-[var(--card-border)] bg-white/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <div className="hero-gradient grid size-8 shrink-0 place-items-center rounded-xl text-xs font-bold text-white shadow-[var(--shadow-sm)] sm:size-9 sm:text-sm">
+            <div className="hero-gradient-animated grid size-8 shrink-0 place-items-center rounded-xl text-xs font-bold text-white shadow-[var(--shadow-sm)] ring-1 ring-white/25 sm:size-9 sm:text-sm">
               MP
             </div>
             <div className="min-w-0 leading-tight">
@@ -347,12 +357,55 @@ export default function Home() {
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-3 px-3 py-4 sm:gap-4 sm:px-4 sm:py-6">
         <section className="overflow-hidden rounded-[var(--radius)] border border-[var(--card-border)] shadow-[var(--shadow)]">
-          <div className="hero-gradient relative px-4 py-5 text-white sm:px-6 sm:py-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="hero-gradient-animated relative overflow-hidden px-4 py-5 text-white sm:px-6 sm:py-8">
+            {/* Decorative floating orbs — purely visual, kept behind the
+                content and pointer-events: none via the utility class. */}
+            <span
+              aria-hidden
+              className="floating-orb floating-orb--sun"
+              style={{
+                width: 260,
+                height: 260,
+                top: -80,
+                right: -60,
+                animationDuration: "14s",
+              }}
+            />
+            <span
+              aria-hidden
+              className="floating-orb floating-orb--sky"
+              style={{
+                width: 200,
+                height: 200,
+                bottom: -70,
+                left: "18%",
+                animationDuration: "17s",
+                animationDelay: "-3s",
+              }}
+            />
+            <span
+              aria-hidden
+              className="floating-orb floating-orb--rose"
+              style={{
+                width: 160,
+                height: 160,
+                top: "40%",
+                left: -50,
+                animationDuration: "16s",
+                animationDelay: "-6s",
+                opacity: 0.35,
+              }}
+            />
+
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="max-w-2xl">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-[var(--orange-500)]/95 px-3 py-1 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-[var(--orange-500)]/95 px-3 py-1 text-xs font-semibold shadow-[0_4px_16px_rgba(255,122,26,0.35)]">
+                    <span className="live-dot" aria-hidden />
                     Jotform Frontend Challenge
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white/95 backdrop-blur">
+                    Case #Podo-01
                   </span>
                 </div>
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -372,8 +425,15 @@ export default function Home() {
               const status = sourceStatus.find((x) => x.source === s.key);
               const count = status?.count ?? 0;
               const err = status?.error;
+              const accent = SOURCE_ACCENT[s.key];
               return (
-                <div key={s.key} className="flex flex-col gap-1 bg-white p-4">
+                <div
+                  key={s.key}
+                  className="source-accent card-lift flex flex-col gap-1 bg-white p-4"
+                  style={
+                    { "--accent": accent } as React.CSSProperties
+                  }
+                >
                   <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
                     {s.label}
                   </div>
@@ -938,12 +998,22 @@ export default function Home() {
           className="flex flex-col gap-3"
         >
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block h-[3px] w-8 rounded-full"
+                  style={{ backgroundImage: "var(--chip-gradient)" }}
+                />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                  Suspicion engine
+                </span>
+              </div>
               <h2
                 id="suspects-title"
                 className="text-lg font-semibold text-[var(--navy-900)] sm:text-xl"
               >
-                Who took Podo?
+                Who took <span className="text-gradient">Podo</span>?
               </h2>
               <p className="text-xs text-[var(--muted)] sm:text-sm">
                 An algorithmic suspicion ranking built from co-location,
