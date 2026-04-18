@@ -245,6 +245,24 @@ export default function MapView({
         polylinesRef.current.push(trail);
       }
 
+      // Pre-pass: find clusters from different people that share a location,
+      // so we can fan their pins out in a small ring and keep every pin visible.
+      const roundKey = (lat: number, lng: number) =>
+        `${Math.round(lat * 1e5) / 1e5},${Math.round(lng * 1e5) / 1e5}`;
+      const collisions = new Map<string, string[]>();
+      for (const [key, group] of personGroups) {
+        if (visibleSet && !visibleSet.has(key)) continue;
+        for (const cluster of group.clusters) {
+          const k = roundKey(cluster.lat, cluster.lng);
+          const arr = collisions.get(k);
+          if (arr) {
+            if (!arr.includes(key)) arr.push(key);
+          } else {
+            collisions.set(k, [key]);
+          }
+        }
+      }
+
       for (const [key, group] of personGroups) {
         if (visibleSet && !visibleSet.has(key)) continue;
 
@@ -257,6 +275,21 @@ export default function MapView({
         for (const cluster of group.clusters) {
           const orderNumber = cluster.stopNumber;
 
+          // Compute pixel offset so people colliding at this exact location
+          // don't hide each other. Each collider gets a slot on a small ring.
+          const locKey = roundKey(cluster.lat, cluster.lng);
+          const colliders = collisions.get(locKey) ?? [key];
+          let dx = 0;
+          let dy = 0;
+          if (colliders.length > 1) {
+            const slot = colliders.indexOf(key);
+            const total = colliders.length;
+            const angle = (2 * Math.PI * slot) / total - Math.PI / 2;
+            const radius = total <= 4 ? 16 : 20;
+            dx = Math.round(Math.cos(angle) * radius);
+            dy = Math.round(Math.sin(angle) * radius);
+          }
+
           const icon = L.divIcon({
             className: "custom-numbered-pin",
             html: buildNumberedPinSvg(group.color, orderNumber, {
@@ -266,8 +299,8 @@ export default function MapView({
               badge: cluster.events.length > 1 ? cluster.events.length : 0,
             }),
             iconSize: [36, 48],
-            iconAnchor: [18, 44],
-            popupAnchor: [0, -40],
+            iconAnchor: [18 - dx, 44 - dy],
+            popupAnchor: [dx, -40 + dy],
           });
 
           const marker = L.marker([cluster.lat, cluster.lng], {
