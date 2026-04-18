@@ -219,12 +219,6 @@ export default function Home() {
                   timeline — all in one place.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="orange">Investigation</Button>
-                <button className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/15">
-                  Map &amp; Data
-                </button>
-              </div>
             </div>
           </div>
 
