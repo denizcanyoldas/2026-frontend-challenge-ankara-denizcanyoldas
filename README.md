@@ -26,17 +26,24 @@ npm install
 Create a `.env.local` file at the repo root:
 
 ```bash
+# One key:
 JOTFORM_API_KEY=your_api_key_here
-JOTFORM_FORM_CHECKINS=261065067494966
-JOTFORM_FORM_MESSAGES=261065765723966
-JOTFORM_FORM_SIGHTINGS=261065244786967
-JOTFORM_FORM_PERSONAL_NOTES=261065509008958
-JOTFORM_FORM_ANON_TIPS=261065875889981
+
+# Or multiple keys (comma-separated) for automatic fail-over on 429:
+# JOTFORM_API_KEYS=key1,key2,key3
+
+# Form IDs are built-in defaults but can be overridden:
+# JOTFORM_FORM_CHECKINS=261065067494966
+# JOTFORM_FORM_MESSAGES=261065765723966
+# JOTFORM_FORM_SIGHTINGS=261065244786967
+# JOTFORM_FORM_PERSONAL_NOTES=261065509008958
+# JOTFORM_FORM_ANON_TIPS=261065875889981
 ```
 
 Notes:
 - **Do not commit** `.env.local` or `data_and_keys.txt`.
-- The API key is used only on the server via Next.js route handlers.
+- API keys are used only on the server via Next.js route handlers.
+- If any key returns `429 API-Limit exceeded`, the server transparently rotates to the next configured key.
 
 ### 3) Run
 ```bash

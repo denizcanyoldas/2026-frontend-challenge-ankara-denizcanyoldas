@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchAllFormSubmissions } from "@/lib/jotform";
+import { fetchAllFormSubmissions, parseApiKeysFromEnv } from "@/lib/jotform";
 
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ formId: string }> }
 ) {
   const { formId } = await ctx.params;
-  const apiKey = process.env.JOTFORM_API_KEY;
+  const keys = parseApiKeysFromEnv();
 
-  if (!apiKey) {
+  if (keys.length === 0) {
     return NextResponse.json(
-      {
-        error: "Missing server env var JOTFORM_API_KEY",
-      },
+      { error: "Missing server env var JOTFORM_API_KEY (or JOTFORM_API_KEYS)" },
       { status: 500 }
     );
   }
@@ -25,7 +23,7 @@ export async function GET(
   }
 
   try {
-    const submissions = await fetchAllFormSubmissions(formId, apiKey, {
+    const submissions = await fetchAllFormSubmissions(formId, keys, {
       cacheTtlMs: 15_000,
       limit: 200,
       maxPages: 25,
@@ -47,4 +45,3 @@ export async function GET(
     );
   }
 }
-
