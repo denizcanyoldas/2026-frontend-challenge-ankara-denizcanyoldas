@@ -76,6 +76,9 @@ export default function Home() {
     { id: string; seq: number } | null
   >(null);
   const mapSectionRef = useRef<HTMLElement | null>(null);
+  // Monotonic request id so a slow response from an earlier fetch can't
+  // overwrite state set by a later one (e.g. rapid Refresh clicks).
+  const loadReqRef = useRef(0);
 
   function pinpointEvent(id: string) {
     setSelectedEventId(id);
@@ -95,6 +98,7 @@ export default function Home() {
   );
 
   async function load() {
+    const reqId = ++loadReqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -106,6 +110,9 @@ export default function Home() {
       } catch {
         data = null;
       }
+
+      // Drop responses that were superseded by a newer refresh click.
+      if (reqId !== loadReqRef.current) return;
 
       if (!r.ok) {
         const msg =
@@ -119,9 +126,10 @@ export default function Home() {
       setEvents(payload?.events ?? []);
       setSourceStatus(payload?.sources ?? []);
     } catch (e) {
+      if (reqId !== loadReqRef.current) return;
       setError(e instanceof Error ? e.message : "Failed to load data");
     } finally {
-      setLoading(false);
+      if (reqId === loadReqRef.current) setLoading(false);
     }
   }
 
@@ -252,10 +260,27 @@ export default function Home() {
     setSelectedEventId(null);
   }
 
+  // Prefer the filtered list (so highlights stay coherent), but always
+  // fall back to the full canonical list. Otherwise clicking a map pin
+  // whose event is hidden by an active source/location filter blanks the
+  // detail panel.
   const selectedEvent = useMemo(() => {
     if (!selectedEventId) return null;
-    return selectedEvents.find((e) => e.id === selectedEventId) ?? null;
-  }, [selectedEvents, selectedEventId]);
+    return (
+      selectedEvents.find((e) => e.id === selectedEventId) ??
+      canonicalEvents.find((e) => e.id === selectedEventId) ??
+      null
+    );
+  }, [selectedEvents, canonicalEvents, selectedEventId]);
+
+  // Drop a stale selectedEventId after a Refresh removes the event it
+  // pointed to — otherwise the id lingers and would reattach silently if
+  // a new event happened to collide on id in a later response.
+  useEffect(() => {
+    if (!selectedEventId) return;
+    const stillExists = canonicalEvents.some((e) => e.id === selectedEventId);
+    if (!stillExists) setSelectedEventId(null);
+  }, [canonicalEvents, selectedEventId]);
 
   const sourceErrors = sourceStatus.filter((s) => s.error);
   const totalSourceCount = sourceStatus.reduce((acc, s) => acc + s.count, 0);

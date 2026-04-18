@@ -184,13 +184,18 @@ export default function MapView({
     return map;
   }, [withCoords, colorMap]);
 
+  // Init + teardown are colocated so the cleanup function always sees the
+  // map that its own effect instance created. This avoids a tiny window
+  // under React StrictMode where the container could be re-bound before
+  // the first async init had a chance to set mapRef.
   useEffect(() => {
     let cancelled = false;
+    let createdMap: LeafletMap | null = null;
 
     (async () => {
       if (!containerRef.current || mapRef.current) return;
       const L = (await import("leaflet")).default;
-      if (cancelled) return;
+      if (cancelled || !containerRef.current || mapRef.current) return;
 
       const map = L.map(containerRef.current, {
         zoomControl: true,
@@ -207,23 +212,42 @@ export default function MapView({
         }
       ).addTo(map);
 
+      // If we were cancelled between the await and now, tear down the
+      // map we just created instead of publishing it.
+      if (cancelled) {
+        map.remove();
+        return;
+      }
+
+      createdMap = map;
       mapRef.current = map;
     })();
 
     return () => {
       cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
+      const m = mapRef.current ?? createdMap;
+      if (m) {
+        m.remove();
         mapRef.current = null;
         markersRef.current = [];
         polylinesRef.current = [];
+        markerByEventIdRef.current.clear();
       }
     };
+  }, []);
+
+  // Keep the Leaflet map in sync with its wrapper's actual pixel size.
+  // Responsive heights (clamp(), vh) and layout reflows can leave tiles
+  // misaligned until the next explicit event; invalidateSize fixes that.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const map = mapRef.current;
+      if (map) map.invalidateSize();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   useEffect(() => {
