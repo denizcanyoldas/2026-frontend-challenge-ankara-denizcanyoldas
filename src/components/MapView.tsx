@@ -94,18 +94,20 @@ export default function MapView({
   }, [visiblePersonKeys]);
 
   const personGroups = useMemo(() => {
+    type Cluster = {
+      lat: number;
+      lng: number;
+      stopNumber: number;
+      events: EventItem[];
+    };
     const map = new Map<
       string,
       {
         label: string;
         color: string;
         events: EventItem[];
-        clusters: {
-          lat: number;
-          lng: number;
-          stopNumber: number;
-          events: EventItem[];
-        }[];
+        clusters: Cluster[];
+        trailPath: [number, number][];
       }
     >();
     for (const ev of withCoords) {
@@ -118,31 +120,38 @@ export default function MapView({
           color: colorForPerson(ev.personKey || "unknown", colorMap),
           events: [ev],
           clusters: [],
+          trailPath: [],
         });
       }
     }
     const round = (n: number) => Math.round(n * 1e5) / 1e5;
     for (const g of map.values()) {
       g.events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      g.clusters = [];
+
+      // All same-location events for this person merge into ONE cluster,
+      // numbered by the order of the FIRST visit to that location.
+      const byLoc = new Map<string, Cluster>();
+      const ordered: Cluster[] = [];
+      const path: [number, number][] = [];
       for (const ev of g.events) {
         const c = ev.coordinates!;
-        const last = g.clusters[g.clusters.length - 1];
-        if (
-          last &&
-          round(last.lat) === round(c.lat) &&
-          round(last.lng) === round(c.lng)
-        ) {
-          last.events.push(ev);
-        } else {
-          g.clusters.push({
+        const locKey = `${round(c.lat)},${round(c.lng)}`;
+        let cluster = byLoc.get(locKey);
+        if (!cluster) {
+          cluster = {
             lat: c.lat,
             lng: c.lng,
-            stopNumber: g.clusters.length + 1,
-            events: [ev],
-          });
+            stopNumber: ordered.length + 1,
+            events: [],
+          };
+          byLoc.set(locKey, cluster);
+          ordered.push(cluster);
         }
+        cluster.events.push(ev);
+        path.push([cluster.lat, cluster.lng]);
       }
+      g.clusters = ordered;
+      g.trailPath = path;
     }
     return map;
   }, [withCoords, colorMap]);
@@ -212,13 +221,11 @@ export default function MapView({
       // Draw trails first so markers render above them.
       for (const [key, group] of personGroups) {
         if (visibleSet && !visibleSet.has(key)) continue;
-        if (group.clusters.length < 2) continue;
+        if (group.trailPath.length < 2) continue;
 
         const isHighlighted = !highlightPersonKey || key === highlightPersonKey;
 
-        const latlngs = group.clusters.map(
-          (cl) => [cl.lat, cl.lng] as [number, number]
-        );
+        const latlngs = group.trailPath;
 
         // Outer halo for the highlighted person so the active trail pops.
         if (highlightPersonKey && key === highlightPersonKey) {
