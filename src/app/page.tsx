@@ -331,11 +331,8 @@ export default function Home() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="max-w-2xl">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-medium ring-1 ring-white/25 backdrop-blur">
-                    Jotform Frontend Challenge
-                  </span>
                   <span className="rounded-full bg-[var(--orange-500)]/95 px-3 py-1 text-xs font-semibold">
-                    3 HOURS
+                    Jotform Frontend Challenge
                   </span>
                 </div>
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
