@@ -42,3 +42,8 @@ data_and_keys.txt
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# keep local-only assets / notes out of the repo
+AGENTS.md
+CLAUDE.md
+jotform_photos/
