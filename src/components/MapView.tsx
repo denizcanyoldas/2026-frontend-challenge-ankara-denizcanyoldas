@@ -27,6 +27,12 @@ type Props = {
    * counter (otherwise React would see an unchanged prop).
    */
   focusRequest?: { id: string; seq: number } | null;
+  /**
+   * When set, only the cluster that contains this event renders at full
+   * brightness; every other pin on the map is dimmed regardless of the
+   * per-person highlight state.
+   */
+  spotlightEventId?: string | null;
 };
 
 const FALLBACK_CENTER: [number, number] = [39.9208, 32.8541]; // Ankara
@@ -83,6 +89,7 @@ export default function MapView({
   height = 380,
   onSelectEvent,
   focusRequest,
+  spotlightEventId,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -240,17 +247,38 @@ export default function MapView({
 
       const bounds = L.latLngBounds([]);
 
+      // Determine which person owns the spotlighted event (if any), so we
+      // can dim every other person's trail and keep only the owner's
+      // trail bright while spotlight is active.
+      const spotlightPersonKey =
+        spotlightEventId != null
+          ? (() => {
+              for (const [k, g] of personGroups) {
+                for (const c of g.clusters) {
+                  if (c.events.some((e) => e.id === spotlightEventId)) return k;
+                }
+              }
+              return null;
+            })()
+          : null;
+      const spotlightActiveOuter = !!spotlightEventId;
+
       // Draw trails first so markers render above them.
       for (const [key, group] of personGroups) {
         if (visibleSet && !visibleSet.has(key)) continue;
         if (group.trailPath.length < 2) continue;
 
-        const isHighlighted = !highlightSet || highlightSet.has(key);
+        const isHighlighted = spotlightActiveOuter
+          ? key === spotlightPersonKey
+          : !highlightSet || highlightSet.has(key);
+        const showHalo = spotlightActiveOuter
+          ? key === spotlightPersonKey
+          : !!highlightSet && highlightSet.has(key);
 
         const latlngs = group.trailPath;
 
         // Outer halo for the highlighted person so the active trail pops.
-        if (highlightSet && highlightSet.has(key)) {
+        if (showHalo) {
           const halo = L.polyline(latlngs, {
             color: group.color,
             weight: 8,
@@ -295,13 +323,25 @@ export default function MapView({
       for (const [key, group] of personGroups) {
         if (visibleSet && !visibleSet.has(key)) continue;
 
-        const isHighlighted = !highlightSet || highlightSet.has(key);
+        const isPersonHighlighted = !highlightSet || highlightSet.has(key);
 
         const totalStops = group.clusters.length;
         const safeLabel = escapeHtml(group.label);
 
         for (const cluster of group.clusters) {
           const orderNumber = cluster.stopNumber;
+
+          // Per-cluster visual state. When a spotlight is active, only the
+          // cluster that contains the spotlighted event is bright; every
+          // other cluster (even other stops of the same person) dims.
+          const isSpotlightCluster = Boolean(
+            spotlightEventId &&
+              cluster.events.some((e) => e.id === spotlightEventId)
+          );
+          const spotlightActive = !!spotlightEventId;
+          const isHighlighted = spotlightActive
+            ? isSpotlightCluster
+            : isPersonHighlighted;
 
           // Compute pixel offset so people colliding at this exact location
           // don't hide each other. Each collider gets a slot on a small ring.
@@ -322,7 +362,9 @@ export default function MapView({
             className: "custom-numbered-pin",
             html: buildNumberedPinSvg(group.color, orderNumber, {
               dim: !isHighlighted,
-              highlighted: !!highlightSet && highlightSet.has(key),
+              highlighted: spotlightActive
+                ? isSpotlightCluster
+                : !!highlightSet && highlightSet.has(key),
               badge: cluster.events.length > 1 ? cluster.events.length : 0,
             }),
             iconSize: [36, 48],
@@ -444,30 +486,59 @@ export default function MapView({
     highlightSet,
     onSelectEvent,
     visibleSet,
+    spotlightEventId,
   ]);
 
   // Pinpoint a specific event when asked. The `seq` field in the request
   // ensures the same event can be re-focused multiple times in a row.
+  // The render effect is async (dynamic import of leaflet), so the marker
+  // lookup may briefly be empty — retry across a few animation frames
+  // before giving up.
   useEffect(() => {
     if (!focusRequest) return;
-    const map = mapRef.current;
-    if (!map) return;
-    const hit = markerByEventIdRef.current.get(focusRequest.id);
-    if (!hit) return;
-    const targetZoom = Math.max(map.getZoom(), 15);
-    map.flyTo([hit.lat, hit.lng], targetZoom, {
-      duration: 0.6,
-      easeLinearity: 0.25,
-    });
-    // Wait for the animation to finish before opening the popup, otherwise
-    // Leaflet sometimes positions the popup off-screen during the pan.
-    const onEnd = () => {
-      hit.marker.openPopup();
-      map.off("moveend", onEnd);
+    let cancelled = false;
+    let rafId: number | null = null;
+    let moveendHandler: (() => void) | null = null;
+    let moveendMap: LeafletMap | null = null;
+    let attempts = 0;
+
+    const attempt = () => {
+      if (cancelled) return;
+      const map = mapRef.current;
+      if (!map) return;
+      const hit = markerByEventIdRef.current.get(focusRequest.id);
+      if (!hit) {
+        if (attempts++ < 20) {
+          rafId = requestAnimationFrame(attempt);
+        }
+        return;
+      }
+      const targetZoom = Math.max(map.getZoom(), 15);
+      map.flyTo([hit.lat, hit.lng], targetZoom, {
+        duration: 0.6,
+        easeLinearity: 0.25,
+      });
+      // Wait for the animation to finish before opening the popup,
+      // otherwise Leaflet can position it off-screen mid-pan.
+      const onEnd = () => {
+        hit.marker.openPopup();
+        map.off("moveend", onEnd);
+        moveendHandler = null;
+        moveendMap = null;
+      };
+      moveendHandler = onEnd;
+      moveendMap = map;
+      map.on("moveend", onEnd);
     };
-    map.on("moveend", onEnd);
+
+    attempt();
+
     return () => {
-      map.off("moveend", onEnd);
+      cancelled = true;
+      if (rafId != null) cancelAnimationFrame(rafId);
+      if (moveendHandler && moveendMap) {
+        moveendMap.off("moveend", moveendHandler);
+      }
     };
   }, [focusRequest]);
 

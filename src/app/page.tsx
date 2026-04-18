@@ -69,6 +69,9 @@ export default function Home() {
     setSelectedEventId(id);
     const target = canonicalEvents.find((e) => e.id === id);
     if (!target?.coordinates) return;
+    // Focus the map on this specific event: select only its owner and
+    // spotlight just this pin (other stops of the same person dim too).
+    setSelectedPersonKeys(new Set([target.personKey]));
     setPinpointRequest((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
     mapSectionRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -429,6 +432,11 @@ export default function Home() {
                 personColors={personColorMap}
                 height="clamp(280px, 55vh, 460px)"
                 focusRequest={pinpointRequest}
+                spotlightEventId={
+                  pinpointRequest && pinpointRequest.id === selectedEventId
+                    ? pinpointRequest.id
+                    : null
+                }
                 onSelectEvent={(id) => {
                   const ev = canonicalEvents.find((e) => e.id === id);
                   if (!ev) return;
