@@ -116,8 +116,8 @@ export default function Home() {
   const sourceErrors = sourceStatus.filter((s) => s.error);
   const totalSourceCount = sourceStatus.reduce((acc, s) => acc + s.count, 0);
 
-  const sightingsWithCoords = useMemo(
-    () => events.filter((e) => e.source === "sightings" && e.coordinates),
+  const eventsWithCoords = useMemo(
+    () => events.filter((e) => e.coordinates),
     [events]
   );
 
@@ -240,27 +240,29 @@ export default function Home() {
 
         <section>
           <Card
-            title="Sightings map"
+            title="Trail map"
             right={
               <div className="flex items-center gap-2">
                 {selectedPersonKey ? (
                   <Badge tone="orange">
-                    Focused: {people.find((p) => p.key === selectedPersonKey)?.label ?? "—"}
+                    Focused:{" "}
+                    {people.find((p) => p.key === selectedPersonKey)?.label ??
+                      "—"}
                   </Badge>
                 ) : null}
-                <Badge tone="navy">{sightingsWithCoords.length} pins</Badge>
+                <Badge tone="navy">{eventsWithCoords.length} pins</Badge>
               </div>
             }
           >
-            {sightingsWithCoords.length === 0 ? (
+            {eventsWithCoords.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[var(--card-border)] bg-white p-4 text-sm text-[var(--muted)]">
-                No sighting coordinates available yet.
+                No coordinates available yet across data sources.
               </div>
             ) : (
               <MapView
-                events={sightingsWithCoords}
+                events={eventsWithCoords}
                 highlightPersonKey={selectedPersonKey}
-                height={380}
+                height={420}
                 onSelectEvent={(id) => {
                   const ev = events.find((e) => e.id === id);
                   if (!ev) return;
