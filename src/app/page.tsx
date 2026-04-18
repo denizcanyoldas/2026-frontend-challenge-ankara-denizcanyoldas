@@ -276,23 +276,26 @@ export default function Home() {
   return (
     <div className="flex flex-1 flex-col">
       <header className="sticky top-0 z-[1100] border-b border-[var(--card-border)] bg-white/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="hero-gradient grid size-9 place-items-center rounded-xl text-sm font-bold text-white shadow-[var(--shadow-sm)]">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="hero-gradient grid size-8 shrink-0 place-items-center rounded-xl text-xs font-bold text-white shadow-[var(--shadow-sm)] sm:size-9 sm:text-sm">
               MP
             </div>
-            <div className="leading-tight">
-              <div className="text-sm font-semibold tracking-tight text-[var(--navy-900)]">
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-xs font-semibold tracking-tight text-[var(--navy-900)] sm:text-sm">
                 Missing Podo:{" "}
                 <span className="text-gradient">The Ankara Case</span>
               </div>
-              <div className="text-xs text-[var(--muted)]">
+              <div className="hidden text-xs text-[var(--muted)] sm:block">
                 Investigation dashboard
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge tone="navy">{events.length} events</Badge>
+            <Badge tone="navy">
+              <span className="hidden sm:inline">{events.length} events</span>
+              <span className="sm:hidden">{events.length}</span>
+            </Badge>
             <Button
               variant="ghost"
               onClick={load}
@@ -305,12 +308,12 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-3 px-3 py-4 sm:gap-4 sm:px-4 sm:py-6">
         <section className="overflow-hidden rounded-[var(--radius)] border border-[var(--card-border)] shadow-[var(--shadow)]">
-          <div className="hero-gradient relative px-6 py-8 text-white">
+          <div className="hero-gradient relative px-4 py-5 text-white sm:px-6 sm:py-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="max-w-2xl">
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-medium ring-1 ring-white/25 backdrop-blur">
                     Jotform Frontend Challenge
                   </span>
@@ -318,7 +321,7 @@ export default function Home() {
                     3 HOURS
                   </span>
                 </div>
-                <h1 className="text-3xl font-semibold tracking-tight">
+                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   Investigation UI
                 </h1>
                 <p className="mt-2 max-w-xl text-sm text-white/80">
@@ -410,7 +413,7 @@ export default function Home() {
                 highlightPersonKeys={selectedPersonKeysArray}
                 visiblePersonKeys={visibleTrailKeys}
                 personColors={personColorMap}
-                height={420}
+                height="clamp(280px, 55vh, 460px)"
                 onSelectEvent={(id) => {
                   const ev = canonicalEvents.find((e) => e.id === id);
                   if (!ev) return;
@@ -574,7 +577,7 @@ export default function Home() {
                     : "No people match your search."}
                 </div>
               ) : (
-                <div className="max-h-[62vh] overflow-auto pr-1">
+                <div className="max-h-[50vh] overflow-auto pr-1 lg:max-h-[62vh]">
                   <ul className="space-y-1">
                     {people.map((p) => {
                       const active = selectedPersonKeys.has(p.key);
@@ -629,7 +632,7 @@ export default function Home() {
               title="Events"
               right={
                 hasAnyPersonSelected ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-1 rounded-xl border border-[var(--card-border)] bg-white p-1 shadow-[var(--shadow-sm)]">
                       <button
                         className={[
@@ -698,7 +701,7 @@ export default function Home() {
                   No events match the current filters.
                 </div>
               ) : viewMode === "timeline" ? (
-                <div className="max-h-[62vh] overflow-auto pr-1">
+                <div className="max-h-[55vh] overflow-auto pr-1 lg:max-h-[62vh]">
                   <ol className="space-y-3">
                     {selectedEvents.map((ev, idx) => {
                       const active = ev.id === selectedEventId;
@@ -753,7 +756,7 @@ export default function Home() {
                   </ol>
                 </div>
               ) : (
-                <div className="max-h-[62vh] overflow-auto pr-1">
+                <div className="max-h-[55vh] overflow-auto pr-1 lg:max-h-[62vh]">
                   <ul className="space-y-2">
                     {selectedEvents
                       .slice()

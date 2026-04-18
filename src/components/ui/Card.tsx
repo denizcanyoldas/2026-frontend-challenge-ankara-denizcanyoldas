@@ -11,11 +11,11 @@ export function Card({
 }) {
   return (
     <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--card-border)] bg-white shadow-[var(--shadow-sm)]">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
-        <div className="text-sm font-semibold tracking-tight text-[var(--navy-900)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--card-border)] px-3 py-3 sm:px-4">
+        <div className="min-w-0 text-sm font-semibold tracking-tight text-[var(--navy-900)]">
           {title}
         </div>
-        {right ? <div className="shrink-0">{right}</div> : null}
+        {right ? <div className="shrink-0 max-w-full">{right}</div> : null}
       </div>
       <div className="p-3">{children}</div>
     </div>

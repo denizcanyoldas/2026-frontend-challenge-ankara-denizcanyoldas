@@ -15,7 +15,11 @@ type Props = {
   highlightPersonKeys?: string[] | null;
   visiblePersonKeys?: string[] | null;
   personColors?: Map<string, string>;
-  height?: number;
+  /**
+   * Height of the map container. Accepts a pixel number or any valid CSS
+   * length (e.g. "clamp(280px, 60vh, 420px)") for responsive sizing.
+   */
+  height?: number | string;
   onSelectEvent?: (id: string) => void;
 };
 
