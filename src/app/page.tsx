@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import Fuse from "fuse.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { groupPeople } from "@/lib/linking/group";
+import {
+  applyPersonCanonicalization,
+  buildPersonCanonicalization,
+} from "@/lib/linking/dedupe";
 import { EventItem, PersonGroup, SourceKind } from "@/lib/types";
 import { SOURCES } from "@/lib/sources";
 import { buildPersonColorMap } from "@/lib/colors";
@@ -92,16 +97,65 @@ export default function Home() {
     load();
   }, []);
 
+  // Merge look-alike people (e.g. "Kagan", "Kağan", "Kağan A.") into a
+  // single canonical identity before anything else consumes the events.
+  const canonicalization = useMemo(
+    () => buildPersonCanonicalization(events),
+    [events]
+  );
+  const canonicalEvents = useMemo(
+    () => applyPersonCanonicalization(events, canonicalization),
+    [events, canonicalization]
+  );
+
+  const allPeople: PersonGroup[] = useMemo(
+    () => groupPeople(canonicalEvents),
+    [canonicalEvents]
+  );
+
+  // Prune selected keys that no longer exist after a dedupe recomputation
+  // (can happen if new events arrive that shift the canonical label).
+  useEffect(() => {
+    setSelectedPersonKeys((prev) => {
+      if (prev.size === 0) return prev;
+      const valid = new Set(allPeople.map((p) => p.key));
+      let changed = false;
+      const next = new Set<string>();
+      for (const k of prev) {
+        if (valid.has(k)) next.add(k);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [allPeople]);
+
+  const peopleFuse = useMemo(
+    () =>
+      new Fuse(allPeople, {
+        keys: ["label"],
+        threshold: 0.4,
+        ignoreLocation: true,
+        minMatchCharLength: 2,
+      }),
+    [allPeople]
+  );
+
   const people: PersonGroup[] = useMemo(() => {
-    const groups = groupPeople(events);
-    const q = query.trim().toLowerCase();
-    if (!q) return groups;
-    return groups.filter((g) => g.label.toLowerCase().includes(q));
-  }, [events, query]);
+    const q = query.trim();
+    if (!q) return allPeople;
+    // Try fuzzy search first; fall back to substring if Fuse finds nothing
+    // (handles very short queries below the min match length).
+    const hits = peopleFuse.search(q).map((r) => r.item);
+    if (hits.length > 0) return hits;
+    const ql = q.toLowerCase();
+    return allPeople.filter((g) => g.label.toLowerCase().includes(ql));
+  }, [allPeople, peopleFuse, query]);
 
   const selectedEvents = useMemo(() => {
     if (selectedPersonKeys.size === 0) return [];
-    let list = events.filter((e) => selectedPersonKeys.has(e.personKey));
+    let list = canonicalEvents.filter((e) =>
+      selectedPersonKeys.has(e.personKey)
+    );
     list = list
       .slice()
       .sort(
@@ -111,12 +165,27 @@ export default function Home() {
     if (sourceFilter !== "all") {
       list = list.filter((e) => e.source === sourceFilter);
     }
-    const lf = locationFilter.trim().toLowerCase();
+    const lf = locationFilter.trim();
     if (lf) {
-      list = list.filter((e) => (e.location ?? "").toLowerCase().includes(lf));
+      const locFuse = new Fuse(list, {
+        keys: ["location"],
+        threshold: 0.4,
+        ignoreLocation: true,
+        minMatchCharLength: 2,
+      });
+      const hits = locFuse.search(lf).map((r) => r.item);
+      if (hits.length > 0) {
+        const hitSet = new Set(hits);
+        list = list.filter((e) => hitSet.has(e));
+      } else {
+        const lfl = lf.toLowerCase();
+        list = list.filter((e) =>
+          (e.location ?? "").toLowerCase().includes(lfl)
+        );
+      }
     }
     return list;
-  }, [events, selectedPersonKeys, sourceFilter, locationFilter]);
+  }, [canonicalEvents, selectedPersonKeys, sourceFilter, locationFilter]);
 
   const selectedPersonKeysArray = useMemo(
     () => Array.from(selectedPersonKeys),
@@ -160,8 +229,8 @@ export default function Home() {
   const totalSourceCount = sourceStatus.reduce((acc, s) => acc + s.count, 0);
 
   const eventsWithCoords = useMemo(
-    () => events.filter((e) => e.coordinates),
-    [events]
+    () => canonicalEvents.filter((e) => e.coordinates),
+    [canonicalEvents]
   );
 
   const peopleWithTrails = useMemo(() => {
@@ -343,7 +412,7 @@ export default function Home() {
                 personColors={personColorMap}
                 height={420}
                 onSelectEvent={(id) => {
-                  const ev = events.find((e) => e.id === id);
+                  const ev = canonicalEvents.find((e) => e.id === id);
                   if (!ev) return;
                   setSelectedPersonKeys((prev) => {
                     if (prev.has(ev.personKey)) return prev;
