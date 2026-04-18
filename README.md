@@ -1,31 +1,49 @@
 # Jotform Frontend Challenge Project
 
 ## User Information
-Please fill in your information after forking this repository:
-
 - **Name**: Deniz Can Yoldaş
 
 ## Project Description
-[Add a brief description of your project here]
+Investigation dashboard for the scenario **“Missing Podo: The Ankara Case”**.
+
+This app fetches submissions from multiple Jotform forms (Checkins, Messages, Sightings, Personal Notes, Anonymous Tips) via a **server-side API proxy** (so your API key stays private), normalizes them into a unified event stream, links records by person, and provides:
+- People browser + search/filter
+- Event list + detail view (including raw JSON)
+- Timeline view (bonus)
+
+## Tech
+- Next.js (App Router) + TypeScript
+- Tailwind CSS
 
 ## Getting Started
-[Add instructions for setting up and running the project]
 
-# 🚀 Challenge Duyurusu
+### 1) Install
+```bash
+npm install
+```
 
-## 📅 Tarih ve Saat
-Cumartesi günü başlama saatinden itibaren üç saattir.
+### 2) Configure environment variables
+Create a `.env.local` file at the repo root:
 
-## 🎯 Challenge Konsepti
-Bu challenge'da, size özel hazırlanmış bir senaryo üzerine web uygulaması geliştirmeniz istenecektir. Challenge başlangıcında senaryo detayları paylaşılacaktır.Katılımcılar, verilen GitHub reposunu fork ederek kendi geliştirme ortamlarını oluşturacaklardır.
+```bash
+JOTFORM_API_KEY=your_api_key_here
+JOTFORM_FORM_CHECKINS=261065067494966
+JOTFORM_FORM_MESSAGES=261065765723966
+JOTFORM_FORM_SIGHTINGS=261065244786967
+JOTFORM_FORM_PERSONAL_NOTES=261065509008958
+JOTFORM_FORM_ANON_TIPS=261065875889981
+```
 
-## 📦 GitHub Reposu
-Challenge için kullanılacak repo: https://github.com/cemjotform/2026-frontend-challenge-ankara
+Notes:
+- **Do not commit** `.env.local` or `data_and_keys.txt`.
+- The API key is used only on the server via Next.js route handlers.
 
-## 🛠️ Hazırlık Süreci
-1. GitHub reposunu fork edin
-2. Tercih ettiğiniz framework ile geliştirme ortamınızı hazırlayın
-3. Hazırladığınız setup'ı fork ettiğiniz repoya gönderin
+### 3) Run
+```bash
+npm run dev
+```
 
-## 💡 Önemli Notlar
-- Katılımcılar kendi tercih ettikleri framework'leri kullanabilirler
+Open `http://localhost:3000`.
+
+## Jotform API
+- API docs: `https://api.jotform.com/docs/`

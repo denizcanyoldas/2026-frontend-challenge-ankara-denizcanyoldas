@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --app-bg: #f6f8fe;
+  --app-fg: #101828;
+
+  --card: #ffffff;
+  --card-border: rgba(16, 24, 40, 0.08);
+  --muted: rgba(16, 24, 40, 0.6);
+
+  --shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+  --shadow-sm: 0 6px 18px rgba(16, 24, 40, 0.07);
+
+  --radius: 16px;
+  --radius-sm: 12px;
+  --focus: rgba(59, 130, 246, 0.6);
+}
+
+@theme inline {
+  --color-background: var(--app-bg);
+  --color-foreground: var(--app-fg);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app-bg: #0b1020;
+    --app-fg: #eef2ff;
+    --card: rgba(255, 255, 255, 0.06);
+    --card-border: rgba(255, 255, 255, 0.12);
+    --muted: rgba(238, 242, 255, 0.65);
+  }
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--app-fg);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
