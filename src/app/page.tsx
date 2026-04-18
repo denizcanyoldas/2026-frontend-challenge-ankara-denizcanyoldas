@@ -315,7 +315,6 @@ export default function Home() {
                   setSelectedPersonKey(ev.personKey);
                   setSelectedEventId(ev.id);
                 }}
-                onToggleTrail={toggleTrail}
               />
             )}
 

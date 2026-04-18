@@ -17,7 +17,6 @@ type Props = {
   personColors?: Map<string, string>;
   height?: number;
   onSelectEvent?: (id: string) => void;
-  onToggleTrail?: (key: string) => void;
 };
 
 const FALLBACK_CENTER: [number, number] = [39.9208, 32.8541]; // Ankara
@@ -73,7 +72,6 @@ export default function MapView({
   personColors,
   height = 380,
   onSelectEvent,
-  onToggleTrail,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -390,17 +388,6 @@ export default function MapView({
     visibleSet,
   ]);
 
-  const legend = useMemo(() => {
-    return Array.from(personGroups.entries())
-      .map(([key, g]) => ({
-        key,
-        label: g.label,
-        color: g.color,
-        count: g.events.length,
-      }))
-      .sort((a, b) => b.count - a.count);
-  }, [personGroups]);
-
   return (
     <div className="relative">
       <div
@@ -410,91 +397,6 @@ export default function MapView({
         role="region"
         aria-label="Sightings map"
       />
-      {legend.length > 0 ? (
-        <div
-          className="absolute bottom-3 left-3 z-[500] flex max-h-[75%] w-[280px] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-white/95 shadow-[var(--shadow-sm)] backdrop-blur"
-          aria-label="Trail selector"
-        >
-          <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Trails ({legend.length})
-            </span>
-            {onToggleTrail ? (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.08)]"
-                  onClick={() => {
-                    for (const item of legend) {
-                      if (visibleSet && !visibleSet.has(item.key)) {
-                        onToggleTrail(item.key);
-                      }
-                    }
-                  }}
-                >
-                  All
-                </button>
-                <span className="text-[10px] text-[var(--muted)]">·</span>
-                <button
-                  type="button"
-                  className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.08)]"
-                  onClick={() => {
-                    for (const item of legend) {
-                      if (!visibleSet || visibleSet.has(item.key)) {
-                        onToggleTrail(item.key);
-                      }
-                    }
-                  }}
-                >
-                  None
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <ul className="flex-1 space-y-0.5 overflow-auto px-1.5 pb-2">
-            {legend.map((item) => {
-              const visible = !visibleSet || visibleSet.has(item.key);
-              const focused =
-                !!highlightPersonKey && item.key === highlightPersonKey;
-              const dim = !visible;
-              return (
-                <li key={item.key}>
-                  <button
-                    type="button"
-                    onClick={() => onToggleTrail?.(item.key)}
-                    className={[
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
-                      focused
-                        ? "bg-[rgba(255,122,26,0.1)]"
-                        : "hover:bg-[rgba(19,48,107,0.06)]",
-                    ].join(" ")}
-                    style={{ opacity: dim ? 0.45 : 1 }}
-                    title={
-                      visible ? "Hide this trail" : "Show this trail"
-                    }
-                    aria-pressed={visible}
-                  >
-                    <span
-                      aria-hidden
-                      className="inline-block h-3 w-3 shrink-0 rounded-full border"
-                      style={{
-                        backgroundColor: visible ? item.color : "transparent",
-                        borderColor: item.color,
-                      }}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--navy-900)]">
-                      {item.label}
-                    </span>
-                    <span className="shrink-0 rounded-md bg-[rgba(19,48,107,0.06)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--navy-700)]">
-                      {item.count}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : null}
     </div>
   );
 }
