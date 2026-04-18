@@ -286,16 +286,13 @@ export default function Home() {
           <Card
             title="Trail map"
             right={
-              <div className="flex items-center gap-2">
-                {selectedPersonKey ? (
-                  <Badge tone="orange">
-                    Focused:{" "}
-                    {people.find((p) => p.key === selectedPersonKey)?.label ??
-                      "—"}
-                  </Badge>
-                ) : null}
-                <Badge tone="navy">{eventsWithCoords.length} pins</Badge>
-              </div>
+              selectedPersonKey ? (
+                <Badge tone="orange">
+                  Focused:{" "}
+                  {people.find((p) => p.key === selectedPersonKey)?.label ??
+                    "—"}
+                </Badge>
+              ) : undefined
             }
           >
             {eventsWithCoords.length === 0 ? (
