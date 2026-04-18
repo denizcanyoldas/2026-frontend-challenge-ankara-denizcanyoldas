@@ -26,21 +26,34 @@ const FALLBACK_ZOOM = 11;
 function buildNumberedPinSvg(
   color: string,
   index: number,
-  opts: { dim?: boolean; highlighted?: boolean } = {}
+  opts: { dim?: boolean; highlighted?: boolean; badge?: number } = {}
 ) {
-  const { dim = false, highlighted = false } = opts;
+  const { dim = false, highlighted = false, badge = 0 } = opts;
   const opacity = dim ? 0.35 : 1;
   const label = index > 99 ? "99+" : String(index);
   const fontSize = label.length >= 3 ? 9 : label.length === 2 ? 11 : 12;
   const strokeWidth = highlighted ? 1.6 : 1.1;
+  const badgeLabel = badge > 0 ? (badge > 99 ? "99+" : `×${badge}`) : "";
+  const badgeFont = badgeLabel.length >= 3 ? 7.5 : 8.5;
+  const badgeSvg = badge > 0
+    ? `
+      <g>
+        <circle cx="28" cy="8" r="6.5" fill="#0b1d3a" stroke="#ffffff" stroke-width="1.2"/>
+        <text x="28" y="8" text-anchor="middle" dominant-baseline="central"
+          font-family="system-ui, -apple-system, Segoe UI, sans-serif"
+          font-size="${badgeFont}" font-weight="800" fill="#ffffff">${badgeLabel}</text>
+      </g>
+    `
+    : "";
   return `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="44" viewBox="0 0 32 44" style="opacity:${opacity}; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.25));">
-      <path d="M16 1.5c-7.7 0-14 5.87-14 13.1 0 9.54 11.85 26.99 13.28 29.08.35.52 1.09.52 1.44 0C18.15 41.59 30 24.14 30 14.6 30 7.37 23.7 1.5 16 1.5z"
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="48" viewBox="0 0 36 48" style="opacity:${opacity}; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.25));">
+      <path d="M18 3.5c-7.7 0-14 5.87-14 13.1 0 9.54 11.85 26.99 13.28 29.08.35.52 1.09.52 1.44 0C20.15 43.59 32 26.14 32 16.6 32 9.37 25.7 3.5 18 3.5z"
         fill="${color}" stroke="#0b0b0b" stroke-opacity="0.45" stroke-width="${strokeWidth}"/>
-      <circle cx="16" cy="14" r="8.2" fill="#ffffff" stroke="${color}" stroke-width="1.2"/>
-      <text x="16" y="14" text-anchor="middle" dominant-baseline="central"
+      <circle cx="18" cy="16" r="8.2" fill="#ffffff" stroke="${color}" stroke-width="1.2"/>
+      <text x="18" y="16" text-anchor="middle" dominant-baseline="central"
         font-family="system-ui, -apple-system, Segoe UI, sans-serif"
         font-size="${fontSize}" font-weight="800" fill="${color}">${label}</text>
+      ${badgeSvg}
     </svg>
   `;
 }
@@ -85,7 +98,18 @@ export default function MapView({
   const personGroups = useMemo(() => {
     const map = new Map<
       string,
-      { label: string; color: string; events: EventItem[] }
+      {
+        label: string;
+        color: string;
+        events: EventItem[];
+        clusters: {
+          lat: number;
+          lng: number;
+          firstIndex: number;
+          lastIndex: number;
+          events: EventItem[];
+        }[];
+      }
     >();
     for (const ev of withCoords) {
       const prior = map.get(ev.personKey);
@@ -96,11 +120,34 @@ export default function MapView({
           label: ev.personLabel || "Unknown",
           color: colorForPerson(ev.personKey || "unknown", colorMap),
           events: [ev],
+          clusters: [],
         });
       }
     }
+    const round = (n: number) => Math.round(n * 1e5) / 1e5;
     for (const g of map.values()) {
       g.events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      g.clusters = [];
+      g.events.forEach((ev, i) => {
+        const c = ev.coordinates!;
+        const last = g.clusters[g.clusters.length - 1];
+        if (
+          last &&
+          round(last.lat) === round(c.lat) &&
+          round(last.lng) === round(c.lng)
+        ) {
+          last.events.push(ev);
+          last.lastIndex = i + 1;
+        } else {
+          g.clusters.push({
+            lat: c.lat,
+            lng: c.lng,
+            firstIndex: i + 1,
+            lastIndex: i + 1,
+            events: [ev],
+          });
+        }
+      });
     }
     return map;
   }, [withCoords, colorMap]);
@@ -170,13 +217,12 @@ export default function MapView({
       // Draw trails first so markers render above them.
       for (const [key, group] of personGroups) {
         if (visibleSet && !visibleSet.has(key)) continue;
-        if (group.events.length < 2) continue;
+        if (group.clusters.length < 2) continue;
 
         const isHighlighted = !highlightPersonKey || key === highlightPersonKey;
 
-        const latlngs = group.events.map(
-          (ev) =>
-            [ev.coordinates!.lat, ev.coordinates!.lng] as [number, number]
+        const latlngs = group.clusters.map(
+          (cl) => [cl.lat, cl.lng] as [number, number]
         );
 
         // Outer halo for the highlighted person so the active trail pops.
@@ -210,9 +256,15 @@ export default function MapView({
         const isHighlighted =
           !highlightPersonKey || key === highlightPersonKey;
 
-        group.events.forEach((ev, idx) => {
-          const c = ev.coordinates!;
-          const orderNumber = idx + 1;
+        const totalStops = group.events.length;
+        const safeLabel = escapeHtml(group.label);
+
+        for (const cluster of group.clusters) {
+          const orderNumber = cluster.firstIndex;
+          const stopRange =
+            cluster.firstIndex === cluster.lastIndex
+              ? `${cluster.firstIndex}`
+              : `${cluster.firstIndex}–${cluster.lastIndex}`;
 
           const icon = L.divIcon({
             className: "custom-numbered-pin",
@@ -220,41 +272,46 @@ export default function MapView({
               dim: !isHighlighted,
               highlighted:
                 !!highlightPersonKey && key === highlightPersonKey,
+              badge: cluster.events.length > 1 ? cluster.events.length : 0,
             }),
-            iconSize: [32, 44],
-            iconAnchor: [16, 42],
-            popupAnchor: [0, -38],
+            iconSize: [36, 48],
+            iconAnchor: [18, 44],
+            popupAnchor: [0, -40],
           });
 
-          const marker = L.marker([c.lat, c.lng], {
+          const marker = L.marker([cluster.lat, cluster.lng], {
             icon,
-            title: `${group.label} · stop ${orderNumber}`,
+            title: `${group.label} · stop ${stopRange}`,
             riseOnHover: true,
             zIndexOffset: isHighlighted ? 1000 : 0,
           }).addTo(map);
 
-          const when = new Date(ev.createdAt).toLocaleString();
-          const safeLabel = escapeHtml(group.label);
-          const safeSummary = escapeHtml(ev.summary);
-          const safeLocation = ev.location ? escapeHtml(ev.location) : "";
-          const safeSource = escapeHtml(
-            SOURCE_LABEL_MAP[ev.source] ?? ev.source
-          );
-          const totalStops = group.events.length;
-
           marker.bindTooltip(
-            `${safeLabel} · stop ${orderNumber}/${totalStops}`,
+            cluster.events.length > 1
+              ? `${safeLabel} · stops ${stopRange} (${cluster.events.length})`
+              : `${safeLabel} · stop ${orderNumber}/${totalStops}`,
             {
               direction: "top",
-              offset: [0, -36],
+              offset: [0, -40],
               className: "red-pin-tooltip",
               permanent: false,
             }
           );
 
-          marker.bindPopup(
-            `
-            <div style="font-family: system-ui, -apple-system, Segoe UI, sans-serif; min-width: 240px;">
+          const firstEvent = cluster.events[0];
+          const firstLocation = firstEvent.location
+            ? escapeHtml(firstEvent.location)
+            : "";
+
+          let popupBody = "";
+          if (cluster.events.length === 1) {
+            const ev = firstEvent;
+            const when = new Date(ev.createdAt).toLocaleString();
+            const safeSummary = escapeHtml(ev.summary);
+            const safeSource = escapeHtml(
+              SOURCE_LABEL_MAP[ev.source] ?? ev.source
+            );
+            popupBody = `
               <div style="display:flex; align-items:center; gap:8px;">
                 <span style="display:inline-grid; place-items:center; width:20px; height:20px; border-radius:999px; background:${group.color}; color:#fff; font-size:11px; font-weight:700;">${orderNumber}</span>
                 <span style="font-weight: 700; color: #0b1d3a; font-size: 14px;">${safeLabel}</span>
@@ -265,19 +322,56 @@ export default function MapView({
               </div>
               <div style="margin-top: 6px; color: #0b1d3a; font-size: 12px;">${safeSummary}</div>
               <div style="margin-top: 6px; color: rgba(11,29,58,0.6); font-size: 11px;">
-                ${when}${safeLocation ? " &middot; " + safeLocation : ""}
+                ${when}${firstLocation ? " &middot; " + firstLocation : ""}
               </div>
-            </div>
-            `
+            `;
+          } else {
+            const items = cluster.events
+              .map((ev, i) => {
+                const when = new Date(ev.createdAt).toLocaleString();
+                const safeSummary = escapeHtml(ev.summary);
+                const safeSource = escapeHtml(
+                  SOURCE_LABEL_MAP[ev.source] ?? ev.source
+                );
+                const stopNumber = cluster.firstIndex + i;
+                return `
+                  <li style="display:flex; gap:8px; padding:6px 0; border-top:1px solid rgba(11,29,58,0.08);">
+                    <span style="display:inline-grid; place-items:center; width:18px; height:18px; flex-shrink:0; border-radius:999px; background:${group.color}; color:#fff; font-size:10px; font-weight:700;">${stopNumber}</span>
+                    <div style="min-width:0;">
+                      <div style="color:#0b1d3a; font-size:12px; font-weight:600;">
+                        ${safeSummary}
+                        <span style="margin-left:6px; font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:rgba(11,29,58,0.55); font-weight:700;">${safeSource}</span>
+                      </div>
+                      <div style="color: rgba(11,29,58,0.6); font-size: 11px;">${when}</div>
+                    </div>
+                  </li>
+                `;
+              })
+              .join("");
+            popupBody = `
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="display:inline-grid; place-items:center; width:22px; height:22px; border-radius:999px; background:${group.color}; color:#fff; font-size:11px; font-weight:700;">${orderNumber}</span>
+                <span style="font-weight: 700; color: #0b1d3a; font-size: 14px;">${safeLabel}</span>
+                <span style="margin-left:auto; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:rgba(11,29,58,0.6);">${cluster.events.length} stops</span>
+              </div>
+              <div style="margin-top: 6px; color: rgba(11,29,58,0.6); font-size: 11px; font-weight:600;">
+                Stops ${stopRange} of ${totalStops}${firstLocation ? " &middot; " + firstLocation : ""}
+              </div>
+              <ul style="list-style:none; padding:4px 0 0; margin:6px 0 0;">${items}</ul>
+            `;
+          }
+
+          marker.bindPopup(
+            `<div style="font-family: system-ui, -apple-system, Segoe UI, sans-serif; min-width: 240px; max-width: 280px;">${popupBody}</div>`
           );
 
           if (onSelectEvent) {
-            marker.on("click", () => onSelectEvent(ev.id));
+            marker.on("click", () => onSelectEvent(firstEvent.id));
           }
 
-          if (isHighlighted) bounds.extend([c.lat, c.lng]);
+          if (isHighlighted) bounds.extend([cluster.lat, cluster.lng]);
           markersRef.current.push(marker);
-        });
+        }
       }
 
       if (bounds.isValid()) {
