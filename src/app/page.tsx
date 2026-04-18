@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { groupPeople, eventsForPerson } from "@/lib/linking/group";
+import { groupPeople } from "@/lib/linking/group";
 import { EventItem, PersonGroup, SourceKind } from "@/lib/types";
 import { SOURCES } from "@/lib/sources";
 import { buildPersonColorMap } from "@/lib/colors";
@@ -46,8 +46,8 @@ export default function Home() {
   const [sourceStatus, setSourceStatus] = useState<SourceStatus[]>([]);
 
   const [query, setQuery] = useState("");
-  const [selectedPersonKey, setSelectedPersonKey] = useState<string | null>(
-    null
+  const [selectedPersonKeys, setSelectedPersonKeys] = useState<Set<string>>(
+    new Set()
   );
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceKind | "all">("all");
@@ -100,8 +100,14 @@ export default function Home() {
   }, [events, query]);
 
   const selectedEvents = useMemo(() => {
-    if (!selectedPersonKey) return [];
-    let list = eventsForPerson(events, selectedPersonKey);
+    if (selectedPersonKeys.size === 0) return [];
+    let list = events.filter((e) => selectedPersonKeys.has(e.personKey));
+    list = list
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
     if (sourceFilter !== "all") {
       list = list.filter((e) => e.source === sourceFilter);
     }
@@ -110,7 +116,40 @@ export default function Home() {
       list = list.filter((e) => (e.location ?? "").toLowerCase().includes(lf));
     }
     return list;
-  }, [events, selectedPersonKey, sourceFilter, locationFilter]);
+  }, [events, selectedPersonKeys, sourceFilter, locationFilter]);
+
+  const selectedPersonKeysArray = useMemo(
+    () => Array.from(selectedPersonKeys),
+    [selectedPersonKeys]
+  );
+
+  const hasAnyPersonSelected = selectedPersonKeys.size > 0;
+  const allPeopleSelected =
+    people.length > 0 && selectedPersonKeys.size >= people.length;
+
+  function togglePerson(key: string) {
+    setSelectedPersonKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setSelectedEventId(null);
+  }
+
+  function selectOnlyPerson(key: string) {
+    setSelectedPersonKeys(new Set([key]));
+    setSelectedEventId(null);
+  }
+
+  function toggleSelectAllPeople() {
+    if (allPeopleSelected) {
+      setSelectedPersonKeys(new Set());
+    } else {
+      setSelectedPersonKeys(new Set(people.map((p) => p.key)));
+    }
+    setSelectedEventId(null);
+  }
 
   const selectedEvent = useMemo(() => {
     if (!selectedEventId) return null;
@@ -280,11 +319,14 @@ export default function Home() {
           <Card
             title="Trail map"
             right={
-              selectedPersonKey ? (
+              hasAnyPersonSelected ? (
                 <Badge tone="orange">
-                  Focused:{" "}
-                  {people.find((p) => p.key === selectedPersonKey)?.label ??
-                    "—"}
+                  {selectedPersonKeys.size === 1
+                    ? `Focused: ${
+                        people.find((p) => selectedPersonKeys.has(p.key))
+                          ?.label ?? "—"
+                      }`
+                    : `Focused: ${selectedPersonKeys.size} people`}
                 </Badge>
               ) : undefined
             }
@@ -296,14 +338,19 @@ export default function Home() {
             ) : (
               <MapView
                 events={eventsWithCoords}
-                highlightPersonKey={selectedPersonKey}
+                highlightPersonKeys={selectedPersonKeysArray}
                 visiblePersonKeys={visibleTrailKeys}
                 personColors={personColorMap}
                 height={420}
                 onSelectEvent={(id) => {
                   const ev = events.find((e) => e.id === id);
                   if (!ev) return;
-                  setSelectedPersonKey(ev.personKey);
+                  setSelectedPersonKeys((prev) => {
+                    if (prev.has(ev.personKey)) return prev;
+                    const next = new Set(prev);
+                    next.add(ev.personKey);
+                    return next;
+                  });
                   setSelectedEventId(ev.id);
                 }}
               />
@@ -345,17 +392,14 @@ export default function Home() {
                 <div className="flex flex-wrap gap-1.5">
                   {peopleWithTrails.map((p) => {
                     const visible = !hiddenTrailKeys.has(p.key);
-                    const focused = p.key === selectedPersonKey;
+                    const focused = selectedPersonKeys.has(p.key);
                     const color = personColorMap.get(p.key) ?? "#999";
                     return (
                       <button
                         key={p.key}
                         type="button"
                         onClick={() => toggleTrail(p.key)}
-                        onDoubleClick={() => {
-                          setSelectedPersonKey(p.key);
-                          setSelectedEventId(null);
-                        }}
+                        onDoubleClick={() => selectOnlyPerson(p.key)}
                         className={[
                           "group flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all",
                           focused
@@ -403,15 +447,46 @@ export default function Home() {
           <div className="lg:col-span-3">
             <Card
               title="People"
-              right={<Badge tone="navy">{people.length}</Badge>}
+              right={
+                <div className="flex items-center gap-2">
+                  {hasAnyPersonSelected ? (
+                    <Badge tone="orange">
+                      {selectedPersonKeys.size} selected
+                    </Badge>
+                  ) : null}
+                  <Badge tone="navy">{people.length}</Badge>
+                </div>
+              }
             >
-              <div className="mb-3">
+              <div className="mb-3 space-y-2">
                 <Input
                   aria-label="Search people"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search people…"
                 />
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAllPeople}
+                    disabled={people.length === 0}
+                    className="rounded-lg border border-[var(--card-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.05)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {allPeopleSelected ? "Deselect all" : "Select all"}
+                  </button>
+                  {hasAnyPersonSelected ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPersonKeys(new Set());
+                        setSelectedEventId(null);
+                      }}
+                      className="rounded-lg border border-[var(--card-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.05)]"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               {loading ? (
@@ -433,20 +508,24 @@ export default function Home() {
                 <div className="max-h-[62vh] overflow-auto pr-1">
                   <ul className="space-y-1">
                     {people.map((p) => {
-                      const active = p.key === selectedPersonKey;
+                      const active = selectedPersonKeys.has(p.key);
                       return (
                         <li key={p.key}>
                           <button
+                            aria-pressed={active}
                             className={[
                               "w-full rounded-xl border px-3 py-2 text-left shadow-[var(--shadow-sm)] transition-colors",
                               active
                                 ? "border-[rgba(255,122,26,0.4)] bg-[rgba(255,122,26,0.06)]"
                                 : "border-[var(--card-border)] bg-white hover:bg-[rgba(19,48,107,0.03)]",
                             ].join(" ")}
-                            onClick={() => {
-                              setSelectedPersonKey(p.key);
-                              setSelectedEventId(null);
-                            }}
+                            onClick={() => togglePerson(p.key)}
+                            onDoubleClick={() => selectOnlyPerson(p.key)}
+                            title={
+                              active
+                                ? "Click to deselect · double-click to keep only this person"
+                                : "Click to add to selection · double-click to select only this person"
+                            }
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
@@ -480,7 +559,7 @@ export default function Home() {
             <Card
               title="Events"
               right={
-                selectedPersonKey ? (
+                hasAnyPersonSelected ? (
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 rounded-xl border border-[var(--card-border)] bg-white p-1 shadow-[var(--shadow-sm)]">
                       <button
@@ -521,7 +600,7 @@ export default function Home() {
                     setSourceFilter(e.target.value as SourceKind | "all")
                   }
                   className="h-10 w-full rounded-xl border border-[var(--card-border)] bg-white px-3 text-sm shadow-[var(--shadow-sm)] disabled:opacity-60"
-                  disabled={!selectedPersonKey}
+                  disabled={!hasAnyPersonSelected}
                 >
                   <option value="all">All sources</option>
                   {SOURCES.map((s) => (
@@ -536,11 +615,11 @@ export default function Home() {
                   value={locationFilter}
                   onChange={(e) => setLocationFilter(e.target.value)}
                   placeholder="Filter by location…"
-                  disabled={!selectedPersonKey}
+                  disabled={!hasAnyPersonSelected}
                 />
               </div>
 
-              {!selectedPersonKey ? (
+              {!hasAnyPersonSelected ? (
                 <div className="rounded-xl border border-dashed border-[var(--card-border)] bg-white p-4 text-sm text-[var(--muted)]">
                   Choose someone from the People list to see linked records
                   across sources.
@@ -579,6 +658,11 @@ export default function Home() {
                                   {ev.summary}
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                                  {selectedPersonKeys.size > 1 ? (
+                                    <Badge tone="orange">
+                                      {ev.personLabel || "Unknown"}
+                                    </Badge>
+                                  ) : null}
                                   <Badge tone="navy">
                                     {SOURCE_LABEL[ev.source]}
                                   </Badge>
@@ -624,6 +708,11 @@ export default function Home() {
                                     {ev.summary}
                                   </div>
                                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                                    {selectedPersonKeys.size > 1 ? (
+                                      <Badge tone="orange">
+                                        {ev.personLabel || "Unknown"}
+                                      </Badge>
+                                    ) : null}
                                     <Badge tone="navy">
                                       {SOURCE_LABEL[ev.source]}
                                     </Badge>

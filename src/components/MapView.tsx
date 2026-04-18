@@ -12,7 +12,7 @@ import { buildPersonColorMap, colorForPerson } from "@/lib/colors";
 
 type Props = {
   events: EventItem[];
-  highlightPersonKey?: string | null;
+  highlightPersonKeys?: string[] | null;
   visiblePersonKeys?: string[] | null;
   personColors?: Map<string, string>;
   height?: number;
@@ -67,7 +67,7 @@ const SOURCE_LABEL_MAP: Record<string, string> = {
 
 export default function MapView({
   events,
-  highlightPersonKey,
+  highlightPersonKeys,
   visiblePersonKeys,
   personColors,
   height = 380,
@@ -92,6 +92,11 @@ export default function MapView({
     if (!visiblePersonKeys) return null;
     return new Set(visiblePersonKeys);
   }, [visiblePersonKeys]);
+
+  const highlightSet = useMemo(() => {
+    if (!highlightPersonKeys || highlightPersonKeys.length === 0) return null;
+    return new Set(highlightPersonKeys);
+  }, [highlightPersonKeys]);
 
   const personGroups = useMemo(() => {
     type Cluster = {
@@ -223,12 +228,12 @@ export default function MapView({
         if (visibleSet && !visibleSet.has(key)) continue;
         if (group.trailPath.length < 2) continue;
 
-        const isHighlighted = !highlightPersonKey || key === highlightPersonKey;
+        const isHighlighted = !highlightSet || highlightSet.has(key);
 
         const latlngs = group.trailPath;
 
         // Outer halo for the highlighted person so the active trail pops.
-        if (highlightPersonKey && key === highlightPersonKey) {
+        if (highlightSet && highlightSet.has(key)) {
           const halo = L.polyline(latlngs, {
             color: group.color,
             weight: 8,
@@ -273,8 +278,7 @@ export default function MapView({
       for (const [key, group] of personGroups) {
         if (visibleSet && !visibleSet.has(key)) continue;
 
-        const isHighlighted =
-          !highlightPersonKey || key === highlightPersonKey;
+        const isHighlighted = !highlightSet || highlightSet.has(key);
 
         const totalStops = group.clusters.length;
         const safeLabel = escapeHtml(group.label);
@@ -301,8 +305,7 @@ export default function MapView({
             className: "custom-numbered-pin",
             html: buildNumberedPinSvg(group.color, orderNumber, {
               dim: !isHighlighted,
-              highlighted:
-                !!highlightPersonKey && key === highlightPersonKey,
+              highlighted: !!highlightSet && highlightSet.has(key),
               badge: cluster.events.length > 1 ? cluster.events.length : 0,
             }),
             iconSize: [36, 48],
@@ -414,7 +417,7 @@ export default function MapView({
   }, [
     withCoords,
     personGroups,
-    highlightPersonKey,
+    highlightSet,
     onSelectEvent,
     visibleSet,
   ]);
