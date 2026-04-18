@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Fuse from "fuse.js";
 import { Badge } from "@/components/ui/Badge";
@@ -60,6 +60,21 @@ export default function Home() {
   const [locationFilter, setLocationFilter] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "timeline">("list");
   const [detailView, setDetailView] = useState<"readable" | "raw">("readable");
+  const [pinpointRequest, setPinpointRequest] = useState<
+    { id: string; seq: number } | null
+  >(null);
+  const mapSectionRef = useRef<HTMLElement | null>(null);
+
+  function pinpointEvent(id: string) {
+    setSelectedEventId(id);
+    const target = canonicalEvents.find((e) => e.id === id);
+    if (!target?.coordinates) return;
+    setPinpointRequest((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }));
+    mapSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
   const [hiddenTrailKeys, setHiddenTrailKeys] = useState<Set<string>>(
     new Set()
   );
@@ -389,7 +404,7 @@ export default function Home() {
           </div>
         ) : null}
 
-        <section>
+        <section ref={mapSectionRef} className="scroll-mt-24">
           <Card
             title="Trail map"
             right={
@@ -416,6 +431,7 @@ export default function Home() {
                 visiblePersonKeys={visibleTrailKeys}
                 personColors={personColorMap}
                 height="clamp(280px, 55vh, 460px)"
+                focusRequest={pinpointRequest}
                 onSelectEvent={(id) => {
                   const ev = canonicalEvents.find((e) => e.id === id);
                   if (!ev) return;
@@ -721,6 +737,8 @@ export default function Home() {
                                 : "border-[var(--card-border)] bg-white hover:bg-[rgba(19,48,107,0.03)]",
                             ].join(" ")}
                             onClick={() => setSelectedEventId(ev.id)}
+                            onDoubleClick={() => pinpointEvent(ev.id)}
+                            title="Double-click to pinpoint on the map"
                           >
                             <div className="absolute left-0 top-3 grid size-7 place-items-center rounded-xl border border-[var(--card-border)] bg-white shadow-[var(--shadow-sm)]">
                               <span className="size-2 rounded-full bg-[var(--orange-500)]" />
@@ -775,6 +793,8 @@ export default function Home() {
                                   : "border-[var(--card-border)] bg-white hover:bg-[rgba(19,48,107,0.03)]",
                               ].join(" ")}
                               onClick={() => setSelectedEventId(ev.id)}
+                              onDoubleClick={() => pinpointEvent(ev.id)}
+                              title="Double-click to pinpoint on the map"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">

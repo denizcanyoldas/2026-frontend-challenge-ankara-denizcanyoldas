@@ -21,6 +21,12 @@ type Props = {
    */
   height?: number | string;
   onSelectEvent?: (id: string) => void;
+  /**
+   * Request to pan/zoom to a specific event and open its popup. The `seq`
+   * field lets callers re-trigger focus on the same event by bumping a
+   * counter (otherwise React would see an unchanged prop).
+   */
+  focusRequest?: { id: string; seq: number } | null;
 };
 
 const FALLBACK_CENTER: [number, number] = [39.9208, 32.8541]; // Ankara
@@ -76,11 +82,17 @@ export default function MapView({
   personColors,
   height = 380,
   onSelectEvent,
+  focusRequest,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<LeafletMarker[]>([]);
   const polylinesRef = useRef<LeafletPolyline[]>([]);
+  // Lookup from an event id to the marker that represents its cluster, so
+  // we can pan/zoom to it when a caller requests a pinpoint.
+  const markerByEventIdRef = useRef<
+    Map<string, { marker: LeafletMarker; lat: number; lng: number }>
+  >(new Map());
 
   const withCoords = useMemo(
     () => events.filter((e) => e.coordinates),
@@ -219,6 +231,7 @@ export default function MapView({
       markersRef.current = [];
       for (const p of polylinesRef.current) p.remove();
       polylinesRef.current = [];
+      markerByEventIdRef.current.clear();
 
       if (withCoords.length === 0) {
         map.setView(FALLBACK_CENTER, FALLBACK_ZOOM);
@@ -407,6 +420,13 @@ export default function MapView({
 
           if (isHighlighted) bounds.extend([cluster.lat, cluster.lng]);
           markersRef.current.push(marker);
+          for (const ev of cluster.events) {
+            markerByEventIdRef.current.set(ev.id, {
+              marker,
+              lat: cluster.lat,
+              lng: cluster.lng,
+            });
+          }
         }
       }
 
@@ -425,6 +445,31 @@ export default function MapView({
     onSelectEvent,
     visibleSet,
   ]);
+
+  // Pinpoint a specific event when asked. The `seq` field in the request
+  // ensures the same event can be re-focused multiple times in a row.
+  useEffect(() => {
+    if (!focusRequest) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const hit = markerByEventIdRef.current.get(focusRequest.id);
+    if (!hit) return;
+    const targetZoom = Math.max(map.getZoom(), 15);
+    map.flyTo([hit.lat, hit.lng], targetZoom, {
+      duration: 0.6,
+      easeLinearity: 0.25,
+    });
+    // Wait for the animation to finish before opening the popup, otherwise
+    // Leaflet sometimes positions the popup off-screen during the pan.
+    const onEnd = () => {
+      hit.marker.openPopup();
+      map.off("moveend", onEnd);
+    };
+    map.on("moveend", onEnd);
+    return () => {
+      map.off("moveend", onEnd);
+    };
+  }, [focusRequest]);
 
   return (
     <div className="relative isolate z-0">
