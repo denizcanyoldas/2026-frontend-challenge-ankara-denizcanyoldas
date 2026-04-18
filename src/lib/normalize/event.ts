@@ -1,4 +1,4 @@
-import { EventItem, SourceKind } from "@/lib/types";
+import { EventItem, LatLng, SourceKind } from "@/lib/types";
 import {
   asRecord,
   extractEmail,
@@ -46,6 +46,15 @@ const MESSAGE_HINTS = [
   "comments",
   "text",
   "body",
+];
+
+const COORDINATE_HINTS = [
+  "coordinates",
+  "coords",
+  "latlng",
+  "latlong",
+  "geolocation",
+  "geo",
 ];
 
 function hintMatches(hints: string[], key?: string): boolean {
@@ -160,6 +169,35 @@ function deriveLocation(answers: JotformAnswer[]): string | undefined {
   return hit ? hit.slice(0, 160) : undefined;
 }
 
+function parseCoordinateString(s: string): LatLng | null {
+  // Accepts "lat,lng" or "lat lng" (with optional spaces), e.g. "39.90584,32.86089"
+  const m = s.match(
+    /(-?\d{1,3}(?:\.\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:\.\d+)?)/
+  );
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+function deriveCoordinates(answers: JotformAnswer[]): LatLng | undefined {
+  const raw = pickByHints(answers, COORDINATE_HINTS);
+  if (raw) {
+    const parsed = parseCoordinateString(raw);
+    if (parsed) return parsed;
+  }
+  // Try any string-looking answer as a fallback (e.g. "lat: 39.9, lng: 32.8").
+  for (const a of answers) {
+    const s = stringifyAnswer(a.answer);
+    if (!s) continue;
+    const parsed = parseCoordinateString(s);
+    if (parsed) return parsed;
+  }
+  return undefined;
+}
+
 function deriveSummary(
   source: SourceKind,
   answers: JotformAnswer[]
@@ -213,6 +251,7 @@ export function normalizeSubmissionToEvent(
   const personLabel = derivePersonLabel(answers);
   const personKey = derivePersonKey(raw, answers, personLabel);
   const location = deriveLocation(answers);
+  const coordinates = deriveCoordinates(answers);
   const summary = deriveSummary(source, answers);
 
   const finalId =
@@ -225,6 +264,7 @@ export function normalizeSubmissionToEvent(
     personKey,
     personLabel,
     location,
+    coordinates,
     summary,
     raw: submission,
   };

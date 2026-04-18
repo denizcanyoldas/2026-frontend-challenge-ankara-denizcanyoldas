@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -8,6 +9,13 @@ import { Input } from "@/components/ui/Input";
 import { groupPeople, eventsForPerson } from "@/lib/linking/group";
 import { EventItem, PersonGroup, SourceKind } from "@/lib/types";
 import { SOURCES } from "@/lib/sources";
+
+const MapView = dynamic(() => import("@/components/MapView"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[360px] animate-pulse rounded-[var(--radius-sm)] border border-[var(--card-border)] bg-[rgba(19,48,107,0.04)]" />
+  ),
+});
 
 type SourceStatus = {
   source: SourceKind;
@@ -107,6 +115,11 @@ export default function Home() {
 
   const sourceErrors = sourceStatus.filter((s) => s.error);
   const totalSourceCount = sourceStatus.reduce((acc, s) => acc + s.count, 0);
+
+  const sightingsWithCoords = useMemo(
+    () => events.filter((e) => e.source === "sightings" && e.coordinates),
+    [events]
+  );
 
   return (
     <div className="flex flex-1 flex-col">
@@ -224,6 +237,40 @@ export default function Home() {
             </ul>
           </div>
         ) : null}
+
+        <section>
+          <Card
+            title="Sightings map"
+            right={
+              <div className="flex items-center gap-2">
+                {selectedPersonKey ? (
+                  <Badge tone="orange">
+                    Focused: {people.find((p) => p.key === selectedPersonKey)?.label ?? "—"}
+                  </Badge>
+                ) : null}
+                <Badge tone="navy">{sightingsWithCoords.length} pins</Badge>
+              </div>
+            }
+          >
+            {sightingsWithCoords.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[var(--card-border)] bg-white p-4 text-sm text-[var(--muted)]">
+                No sighting coordinates available yet.
+              </div>
+            ) : (
+              <MapView
+                events={sightingsWithCoords}
+                highlightPersonKey={selectedPersonKey}
+                height={380}
+                onSelectEvent={(id) => {
+                  const ev = events.find((e) => e.id === id);
+                  if (!ev) return;
+                  setSelectedPersonKey(ev.personKey);
+                  setSelectedEventId(ev.id);
+                }}
+              />
+            )}
+          </Card>
+        </section>
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="lg:col-span-3">
@@ -518,10 +565,6 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="mx-auto w-full max-w-6xl px-4 py-6 text-center text-xs text-[var(--muted)]">
-        Built for the Jotform Frontend Challenge · Data via{" "}
-        <span className="text-gradient font-semibold">Jotform API</span>
-      </footer>
     </div>
   );
 }

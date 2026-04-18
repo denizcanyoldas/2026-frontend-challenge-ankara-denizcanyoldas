@@ -5,6 +5,8 @@ export type SourceKind =
   | "personal_notes"
   | "anon_tips";
 
+export type LatLng = { lat: number; lng: number };
+
 export type EventItem = {
   id: string;
   source: SourceKind;
@@ -12,6 +14,7 @@ export type EventItem = {
   personKey: string;
   personLabel: string;
   location?: string;
+  coordinates?: LatLng;
   summary: string;
   raw: unknown;
 };
