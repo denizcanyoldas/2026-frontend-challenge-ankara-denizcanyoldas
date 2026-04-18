@@ -45,7 +45,7 @@ Before you clone, make sure you have:
 
 ### 1) Install
 ```bash
-git clone <this-repo-url> jotform-hackathon
+git clone https://github.com/denizcanyoldas/2026-frontend-challenge-ankara-denizcanyoldas jotform-hackathon
 cd jotform-hackathon
 npm install
 ```
