@@ -63,7 +63,7 @@ function hintMatches(hints: string[], key?: string): boolean {
   return hints.some((h) => k.includes(h));
 }
 
-function stringifyAnswer(a: unknown): string | null {
+export function stringifyAnswer(a: unknown): string | null {
   if (a == null) return null;
   if (typeof a === "string") return a.trim() || null;
   if (typeof a === "number" || typeof a === "boolean") return String(a);

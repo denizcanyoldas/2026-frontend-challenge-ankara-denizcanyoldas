@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { EventDetails } from "@/components/EventDetails";
 import { groupPeople } from "@/lib/linking/group";
 import {
   applyPersonCanonicalization,
@@ -58,6 +59,7 @@ export default function Home() {
   const [sourceFilter, setSourceFilter] = useState<SourceKind | "all">("all");
   const [locationFilter, setLocationFilter] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "timeline">("list");
+  const [detailView, setDetailView] = useState<"readable" | "raw">("readable");
   const [hiddenTrailKeys, setHiddenTrailKeys] = useState<Set<string>>(
     new Set()
   );
@@ -814,9 +816,39 @@ export default function Home() {
               title="Detail"
               right={
                 selectedEvent ? (
-                  <Badge tone="orange">
-                    {SOURCE_LABEL[selectedEvent.source]}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1 rounded-xl border border-[var(--card-border)] bg-white p-1 shadow-[var(--shadow-sm)]">
+                      <button
+                        type="button"
+                        className={[
+                          "h-7 rounded-lg px-2.5 text-[11px] font-semibold transition-colors",
+                          detailView === "readable"
+                            ? "bg-[var(--navy-700)] text-white"
+                            : "text-[var(--muted)] hover:bg-[rgba(19,48,107,0.06)]",
+                        ].join(" ")}
+                        onClick={() => setDetailView("readable")}
+                        aria-pressed={detailView === "readable"}
+                      >
+                        Readable
+                      </button>
+                      <button
+                        type="button"
+                        className={[
+                          "h-7 rounded-lg px-2.5 text-[11px] font-semibold transition-colors",
+                          detailView === "raw"
+                            ? "bg-[var(--orange-500)] text-white"
+                            : "text-[var(--muted)] hover:bg-[rgba(19,48,107,0.06)]",
+                        ].join(" ")}
+                        onClick={() => setDetailView("raw")}
+                        aria-pressed={detailView === "raw"}
+                      >
+                        Raw JSON
+                      </button>
+                    </div>
+                    <Badge tone="orange">
+                      {SOURCE_LABEL[selectedEvent.source]}
+                    </Badge>
+                  </div>
                 ) : undefined
               }
             >
@@ -838,14 +870,20 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-[var(--card-border)] bg-[rgba(19,48,107,0.03)] p-2 text-xs text-[var(--muted)]">
-                    <div className="mb-1 font-medium text-[var(--navy-900)]">
-                      Raw JSON
+                  {detailView === "readable" ? (
+                    <div className="max-h-[55vh] overflow-auto pr-1 lg:max-h-[62vh]">
+                      <EventDetails event={selectedEvent} />
                     </div>
-                    <pre className="max-h-[44vh] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[var(--navy-900)]">
-                      {JSON.stringify(selectedEvent.raw, null, 2)}
-                    </pre>
-                  </div>
+                  ) : (
+                    <div className="rounded-xl border border-[var(--card-border)] bg-[rgba(19,48,107,0.03)] p-2 text-xs text-[var(--muted)]">
+                      <div className="mb-1 font-medium text-[var(--navy-900)]">
+                        Raw JSON
+                      </div>
+                      <pre className="max-h-[44vh] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[var(--navy-900)]">
+                        {JSON.stringify(selectedEvent.raw, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
