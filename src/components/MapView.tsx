@@ -103,8 +103,7 @@ export default function MapView({
         clusters: {
           lat: number;
           lng: number;
-          firstIndex: number;
-          lastIndex: number;
+          stopNumber: number;
           events: EventItem[];
         }[];
       }
@@ -126,7 +125,7 @@ export default function MapView({
     for (const g of map.values()) {
       g.events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       g.clusters = [];
-      g.events.forEach((ev, i) => {
+      for (const ev of g.events) {
         const c = ev.coordinates!;
         const last = g.clusters[g.clusters.length - 1];
         if (
@@ -135,17 +134,15 @@ export default function MapView({
           round(last.lng) === round(c.lng)
         ) {
           last.events.push(ev);
-          last.lastIndex = i + 1;
         } else {
           g.clusters.push({
             lat: c.lat,
             lng: c.lng,
-            firstIndex: i + 1,
-            lastIndex: i + 1,
+            stopNumber: g.clusters.length + 1,
             events: [ev],
           });
         }
-      });
+      }
     }
     return map;
   }, [withCoords, colorMap]);
@@ -254,15 +251,11 @@ export default function MapView({
         const isHighlighted =
           !highlightPersonKey || key === highlightPersonKey;
 
-        const totalStops = group.events.length;
+        const totalStops = group.clusters.length;
         const safeLabel = escapeHtml(group.label);
 
         for (const cluster of group.clusters) {
-          const orderNumber = cluster.firstIndex;
-          const stopRange =
-            cluster.firstIndex === cluster.lastIndex
-              ? `${cluster.firstIndex}`
-              : `${cluster.firstIndex}–${cluster.lastIndex}`;
+          const orderNumber = cluster.stopNumber;
 
           const icon = L.divIcon({
             className: "custom-numbered-pin",
@@ -279,14 +272,14 @@ export default function MapView({
 
           const marker = L.marker([cluster.lat, cluster.lng], {
             icon,
-            title: `${group.label} · stop ${stopRange}`,
+            title: `${group.label} · stop ${orderNumber}`,
             riseOnHover: true,
             zIndexOffset: isHighlighted ? 1000 : 0,
           }).addTo(map);
 
           marker.bindTooltip(
             cluster.events.length > 1
-              ? `${safeLabel} · stops ${stopRange} (${cluster.events.length})`
+              ? `${safeLabel} · stop ${orderNumber}/${totalStops} (${cluster.events.length} events)`
               : `${safeLabel} · stop ${orderNumber}/${totalStops}`,
             {
               direction: "top",
@@ -325,17 +318,15 @@ export default function MapView({
             `;
           } else {
             const items = cluster.events
-              .map((ev, i) => {
+              .map((ev) => {
                 const when = new Date(ev.createdAt).toLocaleString();
                 const safeSummary = escapeHtml(ev.summary);
                 const safeSource = escapeHtml(
                   SOURCE_LABEL_MAP[ev.source] ?? ev.source
                 );
-                const stopNumber = cluster.firstIndex + i;
                 return `
                   <li style="display:flex; gap:8px; padding:6px 0; border-top:1px solid rgba(11,29,58,0.08);">
-                    <span style="display:inline-grid; place-items:center; width:18px; height:18px; flex-shrink:0; border-radius:999px; background:${group.color}; color:#fff; font-size:10px; font-weight:700;">${stopNumber}</span>
-                    <div style="min-width:0;">
+                    <div style="min-width:0; flex:1;">
                       <div style="color:#0b1d3a; font-size:12px; font-weight:600;">
                         ${safeSummary}
                         <span style="margin-left:6px; font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:rgba(11,29,58,0.55); font-weight:700;">${safeSource}</span>
@@ -350,10 +341,10 @@ export default function MapView({
               <div style="display:flex; align-items:center; gap:8px;">
                 <span style="display:inline-grid; place-items:center; width:22px; height:22px; border-radius:999px; background:${group.color}; color:#fff; font-size:11px; font-weight:700;">${orderNumber}</span>
                 <span style="font-weight: 700; color: #0b1d3a; font-size: 14px;">${safeLabel}</span>
-                <span style="margin-left:auto; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:rgba(11,29,58,0.6);">${cluster.events.length} stops</span>
+                <span style="margin-left:auto; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:rgba(11,29,58,0.6);">${cluster.events.length} events</span>
               </div>
               <div style="margin-top: 6px; color: rgba(11,29,58,0.6); font-size: 11px; font-weight:600;">
-                Stops ${stopRange} of ${totalStops}${firstLocation ? " &middot; " + firstLocation : ""}
+                Stop ${orderNumber} of ${totalStops}${firstLocation ? " &middot; " + firstLocation : ""}
               </div>
               <ul style="list-style:none; padding:4px 0 0; margin:6px 0 0;">${items}</ul>
             `;
