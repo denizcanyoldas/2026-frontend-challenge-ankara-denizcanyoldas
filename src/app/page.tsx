@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { groupPeople, eventsForPerson } from "@/lib/linking/group";
 import { EventItem, PersonGroup, SourceKind } from "@/lib/types";
 import { SOURCES } from "@/lib/sources";
+import { buildPersonColorMap } from "@/lib/colors";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -52,6 +53,9 @@ export default function Home() {
   const [sourceFilter, setSourceFilter] = useState<SourceKind | "all">("all");
   const [locationFilter, setLocationFilter] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "timeline">("list");
+  const [hiddenTrailKeys, setHiddenTrailKeys] = useState<Set<string>>(
+    new Set()
+  );
 
   async function load() {
     setLoading(true);
@@ -120,6 +124,46 @@ export default function Home() {
     () => events.filter((e) => e.coordinates),
     [events]
   );
+
+  const peopleWithTrails = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; count: number }>();
+    for (const ev of eventsWithCoords) {
+      const key = ev.personKey || "unknown";
+      const prior = map.get(key);
+      if (prior) {
+        prior.count += 1;
+      } else {
+        map.set(key, {
+          key,
+          label: ev.personLabel || "Unknown",
+          count: 1,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label);
+    });
+  }, [eventsWithCoords]);
+
+  const personColorMap = useMemo(
+    () => buildPersonColorMap(peopleWithTrails.map((p) => p.key)),
+    [peopleWithTrails]
+  );
+
+  const visibleTrailKeys = useMemo(
+    () => peopleWithTrails.filter((p) => !hiddenTrailKeys.has(p.key)).map((p) => p.key),
+    [peopleWithTrails, hiddenTrailKeys]
+  );
+
+  function toggleTrail(key: string) {
+    setHiddenTrailKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -262,6 +306,8 @@ export default function Home() {
               <MapView
                 events={eventsWithCoords}
                 highlightPersonKey={selectedPersonKey}
+                visiblePersonKeys={visibleTrailKeys}
+                personColors={personColorMap}
                 height={420}
                 onSelectEvent={(id) => {
                   const ev = events.find((e) => e.id === id);
@@ -269,8 +315,97 @@ export default function Home() {
                   setSelectedPersonKey(ev.personKey);
                   setSelectedEventId(ev.id);
                 }}
+                onToggleTrail={toggleTrail}
               />
             )}
+
+            {peopleWithTrails.length > 0 ? (
+              <div className="mt-3 rounded-xl border border-[var(--card-border)] bg-white p-3 shadow-[var(--shadow-sm)]">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      Trails on map
+                    </span>
+                    <Badge tone="navy">
+                      {visibleTrailKeys.length}/{peopleWithTrails.length}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--card-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.05)]"
+                      onClick={() => setHiddenTrailKeys(new Set())}
+                    >
+                      Show all
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--card-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.05)]"
+                      onClick={() =>
+                        setHiddenTrailKeys(
+                          new Set(peopleWithTrails.map((p) => p.key))
+                        )
+                      }
+                    >
+                      Hide all
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {peopleWithTrails.map((p) => {
+                    const visible = !hiddenTrailKeys.has(p.key);
+                    const focused = p.key === selectedPersonKey;
+                    const color = personColorMap.get(p.key) ?? "#999";
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        onClick={() => toggleTrail(p.key)}
+                        onDoubleClick={() => {
+                          setSelectedPersonKey(p.key);
+                          setSelectedEventId(null);
+                        }}
+                        className={[
+                          "group flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all",
+                          focused
+                            ? "border-[rgba(255,122,26,0.5)] bg-[rgba(255,122,26,0.08)] text-[var(--navy-900)]"
+                            : visible
+                              ? "border-[var(--card-border)] bg-white text-[var(--navy-900)] hover:bg-[rgba(19,48,107,0.04)]"
+                              : "border-[var(--card-border)] bg-[rgba(19,48,107,0.03)] text-[var(--muted)] hover:bg-white",
+                        ].join(" ")}
+                        style={{ opacity: visible ? 1 : 0.55 }}
+                        aria-pressed={visible}
+                        title={
+                          visible
+                            ? `Hide trail · ${p.label}`
+                            : `Show trail · ${p.label}`
+                        }
+                      >
+                        <span
+                          aria-hidden
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border"
+                          style={{
+                            backgroundColor: visible ? color : "transparent",
+                            borderColor: color,
+                          }}
+                        />
+                        <span className="truncate max-w-[160px]">
+                          {p.label}
+                        </span>
+                        <span className="rounded-md bg-[rgba(19,48,107,0.06)] px-1.5 text-[10px] font-semibold text-[var(--navy-700)]">
+                          {p.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-2 text-[11px] text-[var(--muted)]">
+                  Click to toggle a trail · double-click to focus that person
+                </div>
+              </div>
+            ) : null}
           </Card>
         </section>
 

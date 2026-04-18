@@ -8,51 +8,39 @@ import type {
 } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { EventItem } from "@/lib/types";
+import { buildPersonColorMap, colorForPerson } from "@/lib/colors";
 
 type Props = {
   events: EventItem[];
   highlightPersonKey?: string | null;
+  visiblePersonKeys?: string[] | null;
+  personColors?: Map<string, string>;
   height?: number;
   onSelectEvent?: (id: string) => void;
+  onToggleTrail?: (key: string) => void;
 };
 
 const FALLBACK_CENTER: [number, number] = [39.9208, 32.8541]; // Ankara
 const FALLBACK_ZOOM = 11;
 
-// Distinct, accessible colors; red stays the primary accent for highlighted pins.
-const PALETTE = [
-  "#d11a1a", // red
-  "#1e4fbf", // blue
-  "#ff7a1a", // orange
-  "#0b8f6a", // teal
-  "#7b3ff2", // purple
-  "#c57a00", // amber
-  "#c71585", // pink
-  "#0b1d3a", // navy
-];
-
-function colorForPerson(key: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < key.length; i += 1) {
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return PALETTE[(h >>> 0) % PALETTE.length];
-}
-
-function buildRedPinSvg() {
+function buildNumberedPinSvg(
+  color: string,
+  index: number,
+  opts: { dim?: boolean; highlighted?: boolean } = {}
+) {
+  const { dim = false, highlighted = false } = opts;
+  const opacity = dim ? 0.35 : 1;
+  const label = index > 99 ? "99+" : String(index);
+  const fontSize = label.length >= 3 ? 9 : label.length === 2 ? 11 : 12;
+  const strokeWidth = highlighted ? 1.6 : 1.1;
   return `
-    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42">
-      <defs>
-        <linearGradient id="pinGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#ff5a36"/>
-          <stop offset="100%" stop-color="#d11a1a"/>
-        </linearGradient>
-      </defs>
-      <path d="M15 1c-7.18 0-13 5.46-13 12.2 0 8.87 11.03 25.1 12.36 27.04a.77.77 0 0 0 1.28 0C16.97 38.3 28 22.07 28 13.2 28 6.46 22.18 1 15 1z"
-        fill="url(#pinGrad)" stroke="#6b0f0f" stroke-width="1.2"/>
-      <circle cx="15" cy="13" r="5" fill="#ffffff"/>
-      <circle cx="15" cy="13" r="2.5" fill="#d11a1a"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="44" viewBox="0 0 32 44" style="opacity:${opacity}; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.25));">
+      <path d="M16 1.5c-7.7 0-14 5.87-14 13.1 0 9.54 11.85 26.99 13.28 29.08.35.52 1.09.52 1.44 0C18.15 41.59 30 24.14 30 14.6 30 7.37 23.7 1.5 16 1.5z"
+        fill="${color}" stroke="#0b0b0b" stroke-opacity="0.45" stroke-width="${strokeWidth}"/>
+      <circle cx="16" cy="14" r="8.2" fill="#ffffff" stroke="${color}" stroke-width="1.2"/>
+      <text x="16" y="14" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, -apple-system, Segoe UI, sans-serif"
+        font-size="${fontSize}" font-weight="800" fill="${color}">${label}</text>
     </svg>
   `;
 }
@@ -68,8 +56,11 @@ const SOURCE_LABEL_MAP: Record<string, string> = {
 export default function MapView({
   events,
   highlightPersonKey,
+  visiblePersonKeys,
+  personColors,
   height = 380,
   onSelectEvent,
+  onToggleTrail,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -80,6 +71,16 @@ export default function MapView({
     () => events.filter((e) => e.coordinates),
     [events]
   );
+
+  const colorMap = useMemo(() => {
+    if (personColors && personColors.size > 0) return personColors;
+    return buildPersonColorMap(withCoords.map((e) => e.personKey));
+  }, [personColors, withCoords]);
+
+  const visibleSet = useMemo(() => {
+    if (!visiblePersonKeys) return null;
+    return new Set(visiblePersonKeys);
+  }, [visiblePersonKeys]);
 
   const personGroups = useMemo(() => {
     const map = new Map<
@@ -93,7 +94,7 @@ export default function MapView({
       } else {
         map.set(ev.personKey, {
           label: ev.personLabel || "Unknown",
-          color: colorForPerson(ev.personKey || "unknown"),
+          color: colorForPerson(ev.personKey || "unknown", colorMap),
           events: [ev],
         });
       }
@@ -102,7 +103,7 @@ export default function MapView({
       g.events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
     return map;
-  }, [withCoords]);
+  }, [withCoords, colorMap]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,26 +165,11 @@ export default function MapView({
         return;
       }
 
-      const redIcon = L.divIcon({
-        className: "custom-red-pin",
-        html: buildRedPinSvg(),
-        iconSize: [30, 42],
-        iconAnchor: [15, 40],
-        popupAnchor: [0, -36],
-      });
-
-      const dimIcon = L.divIcon({
-        className: "custom-red-pin dim",
-        html: `<div style="opacity:0.35">${buildRedPinSvg()}</div>`,
-        iconSize: [30, 42],
-        iconAnchor: [15, 40],
-        popupAnchor: [0, -36],
-      });
-
       const bounds = L.latLngBounds([]);
 
       // Draw trails first so markers render above them.
       for (const [key, group] of personGroups) {
+        if (visibleSet && !visibleSet.has(key)) continue;
         if (group.events.length < 2) continue;
 
         const isHighlighted = !highlightPersonKey || key === highlightPersonKey;
@@ -193,66 +179,105 @@ export default function MapView({
             [ev.coordinates!.lat, ev.coordinates!.lng] as [number, number]
         );
 
+        // Outer halo for the highlighted person so the active trail pops.
+        if (highlightPersonKey && key === highlightPersonKey) {
+          const halo = L.polyline(latlngs, {
+            color: group.color,
+            weight: 8,
+            opacity: 0.18,
+            lineCap: "round",
+            lineJoin: "round",
+            interactive: false,
+          }).addTo(map);
+          polylinesRef.current.push(halo);
+        }
+
         const trail = L.polyline(latlngs, {
           color: group.color,
-          weight: isHighlighted ? 3.2 : 2,
-          opacity: isHighlighted ? 0.9 : 0.18,
+          weight: isHighlighted ? 3.6 : 2.2,
+          opacity: isHighlighted ? 0.95 : 0.32,
           dashArray: "6, 8",
           lineCap: "round",
           lineJoin: "round",
           interactive: false,
         }).addTo(map);
-
         polylinesRef.current.push(trail);
       }
 
-      for (const ev of withCoords) {
-        const c = ev.coordinates!;
+      for (const [key, group] of personGroups) {
+        if (visibleSet && !visibleSet.has(key)) continue;
+
         const isHighlighted =
-          !highlightPersonKey || ev.personKey === highlightPersonKey;
+          !highlightPersonKey || key === highlightPersonKey;
 
-        const marker = L.marker([c.lat, c.lng], {
-          icon: isHighlighted ? redIcon : dimIcon,
-          title: ev.personLabel,
-          riseOnHover: true,
-        }).addTo(map);
+        group.events.forEach((ev, idx) => {
+          const c = ev.coordinates!;
+          const orderNumber = idx + 1;
 
-        const when = new Date(ev.createdAt).toLocaleString();
-        const safeLabel = escapeHtml(ev.personLabel);
-        const safeSummary = escapeHtml(ev.summary);
-        const safeLocation = ev.location ? escapeHtml(ev.location) : "";
-        const safeSource = escapeHtml(SOURCE_LABEL_MAP[ev.source] ?? ev.source);
-        const trailColor = colorForPerson(ev.personKey || "unknown");
+          const icon = L.divIcon({
+            className: "custom-numbered-pin",
+            html: buildNumberedPinSvg(group.color, orderNumber, {
+              dim: !isHighlighted,
+              highlighted:
+                !!highlightPersonKey && key === highlightPersonKey,
+            }),
+            iconSize: [32, 44],
+            iconAnchor: [16, 42],
+            popupAnchor: [0, -38],
+          });
 
-        marker.bindTooltip(safeLabel, {
-          direction: "top",
-          offset: [0, -34],
-          className: "red-pin-tooltip",
-          permanent: false,
+          const marker = L.marker([c.lat, c.lng], {
+            icon,
+            title: `${group.label} · stop ${orderNumber}`,
+            riseOnHover: true,
+            zIndexOffset: isHighlighted ? 1000 : 0,
+          }).addTo(map);
+
+          const when = new Date(ev.createdAt).toLocaleString();
+          const safeLabel = escapeHtml(group.label);
+          const safeSummary = escapeHtml(ev.summary);
+          const safeLocation = ev.location ? escapeHtml(ev.location) : "";
+          const safeSource = escapeHtml(
+            SOURCE_LABEL_MAP[ev.source] ?? ev.source
+          );
+          const totalStops = group.events.length;
+
+          marker.bindTooltip(
+            `${safeLabel} · stop ${orderNumber}/${totalStops}`,
+            {
+              direction: "top",
+              offset: [0, -36],
+              className: "red-pin-tooltip",
+              permanent: false,
+            }
+          );
+
+          marker.bindPopup(
+            `
+            <div style="font-family: system-ui, -apple-system, Segoe UI, sans-serif; min-width: 240px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="display:inline-grid; place-items:center; width:20px; height:20px; border-radius:999px; background:${group.color}; color:#fff; font-size:11px; font-weight:700;">${orderNumber}</span>
+                <span style="font-weight: 700; color: #0b1d3a; font-size: 14px;">${safeLabel}</span>
+                <span style="margin-left:auto; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:rgba(11,29,58,0.6);">${safeSource}</span>
+              </div>
+              <div style="margin-top: 6px; color: rgba(11,29,58,0.6); font-size: 11px; font-weight:600;">
+                Stop ${orderNumber} of ${totalStops}
+              </div>
+              <div style="margin-top: 6px; color: #0b1d3a; font-size: 12px;">${safeSummary}</div>
+              <div style="margin-top: 6px; color: rgba(11,29,58,0.6); font-size: 11px;">
+                ${when}${safeLocation ? " &middot; " + safeLocation : ""}
+              </div>
+            </div>
+            `
+          );
+
+          if (onSelectEvent) {
+            marker.on("click", () => onSelectEvent(ev.id));
+          }
+
+          if (isHighlighted) bounds.extend([c.lat, c.lng]);
+          markersRef.current.push(marker);
         });
-
-        marker.bindPopup(
-          `
-          <div style="font-family: system-ui, -apple-system, Segoe UI, sans-serif; min-width: 220px;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="display:inline-block; width:10px; height:10px; border-radius:999px; background:${trailColor};"></span>
-              <span style="font-weight: 700; color: #0b1d3a; font-size: 14px;">${safeLabel}</span>
-              <span style="margin-left:auto; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:rgba(11,29,58,0.6);">${safeSource}</span>
-            </div>
-            <div style="margin-top: 6px; color: #0b1d3a; font-size: 12px;">${safeSummary}</div>
-            <div style="margin-top: 6px; color: rgba(11,29,58,0.6); font-size: 11px;">
-              ${when}${safeLocation ? " &middot; " + safeLocation : ""}
-            </div>
-          </div>
-          `
-        );
-
-        if (onSelectEvent) {
-          marker.on("click", () => onSelectEvent(ev.id));
-        }
-
-        if (isHighlighted) bounds.extend([c.lat, c.lng]);
-        markersRef.current.push(marker);
       }
 
       if (bounds.isValid()) {
@@ -263,20 +288,23 @@ export default function MapView({
     return () => {
       cancelled = true;
     };
-  }, [withCoords, personGroups, highlightPersonKey, onSelectEvent]);
+  }, [
+    withCoords,
+    personGroups,
+    highlightPersonKey,
+    onSelectEvent,
+    visibleSet,
+  ]);
 
-  // Build a small legend (top N people by event count in view)
   const legend = useMemo(() => {
-    const arr = Array.from(personGroups.entries())
+    return Array.from(personGroups.entries())
       .map(([key, g]) => ({
         key,
         label: g.label,
         color: g.color,
         count: g.events.length,
       }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
-    return arr;
+      .sort((a, b) => b.count - a.count);
   }, [personGroups]);
 
   return (
@@ -290,35 +318,83 @@ export default function MapView({
       />
       {legend.length > 0 ? (
         <div
-          className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[60%] rounded-xl border border-[var(--card-border)] bg-white/95 p-2 text-[11px] shadow-[var(--shadow-sm)] backdrop-blur"
-          aria-label="Map legend"
+          className="absolute bottom-3 left-3 z-[500] flex max-h-[75%] w-[280px] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-white/95 shadow-[var(--shadow-sm)] backdrop-blur"
+          aria-label="Trail selector"
         >
-          <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-            Trails
-          </div>
-          <ul className="flex flex-wrap gap-x-3 gap-y-1 px-1">
-            {legend.map((item) => {
-              const dim =
-                highlightPersonKey && item.key !== highlightPersonKey;
-              return (
-                <li
-                  key={item.key}
-                  className="flex items-center gap-1.5"
-                  style={{ opacity: dim ? 0.4 : 1 }}
+          <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Trails ({legend.length})
+            </span>
+            {onToggleTrail ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.08)]"
+                  onClick={() => {
+                    for (const item of legend) {
+                      if (visibleSet && !visibleSet.has(item.key)) {
+                        onToggleTrail(item.key);
+                      }
+                    }
+                  }}
                 >
-                  <span
-                    aria-hidden
-                    className="inline-block h-[2px] w-5 rounded-full"
-                    style={{
-                      backgroundImage: `repeating-linear-gradient(90deg, ${item.color} 0 4px, transparent 4px 8px)`,
-                      backgroundColor: "transparent",
-                      borderBottom: `2px dashed ${item.color}`,
-                    }}
-                  />
-                  <span className="font-medium text-[var(--navy-900)]">
-                    {item.label}
-                  </span>
-                  <span className="text-[var(--muted)]">({item.count})</span>
+                  All
+                </button>
+                <span className="text-[10px] text-[var(--muted)]">·</span>
+                <button
+                  type="button"
+                  className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[var(--navy-700)] hover:bg-[rgba(19,48,107,0.08)]"
+                  onClick={() => {
+                    for (const item of legend) {
+                      if (!visibleSet || visibleSet.has(item.key)) {
+                        onToggleTrail(item.key);
+                      }
+                    }
+                  }}
+                >
+                  None
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <ul className="flex-1 space-y-0.5 overflow-auto px-1.5 pb-2">
+            {legend.map((item) => {
+              const visible = !visibleSet || visibleSet.has(item.key);
+              const focused =
+                !!highlightPersonKey && item.key === highlightPersonKey;
+              const dim = !visible;
+              return (
+                <li key={item.key}>
+                  <button
+                    type="button"
+                    onClick={() => onToggleTrail?.(item.key)}
+                    className={[
+                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
+                      focused
+                        ? "bg-[rgba(255,122,26,0.1)]"
+                        : "hover:bg-[rgba(19,48,107,0.06)]",
+                    ].join(" ")}
+                    style={{ opacity: dim ? 0.45 : 1 }}
+                    title={
+                      visible ? "Hide this trail" : "Show this trail"
+                    }
+                    aria-pressed={visible}
+                  >
+                    <span
+                      aria-hidden
+                      className="inline-block h-3 w-3 shrink-0 rounded-full border"
+                      style={{
+                        backgroundColor: visible ? item.color : "transparent",
+                        borderColor: item.color,
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--navy-900)]">
+                      {item.label}
+                    </span>
+                    <span className="shrink-0 rounded-md bg-[rgba(19,48,107,0.06)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--navy-700)]">
+                      {item.count}
+                    </span>
+                  </button>
                 </li>
               );
             })}
