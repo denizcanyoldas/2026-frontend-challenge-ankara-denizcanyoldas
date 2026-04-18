@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { EventDetails } from "@/components/EventDetails";
+import { SuspectBoard } from "@/components/SuspectBoard";
 import { groupPeople } from "@/lib/linking/group";
 import {
   applyPersonCanonicalization,
   buildPersonCanonicalization,
 } from "@/lib/linking/dedupe";
+import { computeSuspectScores } from "@/lib/analysis/suspects";
 import { EventItem, PersonGroup, SourceKind } from "@/lib/types";
 import { SOURCES } from "@/lib/sources";
 import { buildPersonColorMap } from "@/lib/colors";
@@ -278,6 +280,21 @@ export default function Home() {
     () => buildPersonColorMap(peopleWithTrails.map((p) => p.key)),
     [peopleWithTrails]
   );
+
+  const suspectAnalysis = useMemo(
+    () => computeSuspectScores(canonicalEvents),
+    [canonicalEvents]
+  );
+
+  function focusSuspectOnMap(key: string) {
+    setSelectedPersonKeys(new Set([key]));
+    setSelectedEventId(null);
+    setPinpointRequest(null);
+    mapSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
 
   const visibleTrailKeys = useMemo(
     () => peopleWithTrails.filter((p) => !hiddenTrailKeys.has(p.key)).map((p) => p.key),
@@ -913,6 +930,37 @@ export default function Home() {
               )}
             </Card>
           </div>
+        </section>
+
+        <section
+          id="suspects"
+          aria-labelledby="suspects-title"
+          className="flex flex-col gap-3"
+        >
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2
+                id="suspects-title"
+                className="text-lg font-semibold text-[var(--navy-900)] sm:text-xl"
+              >
+                Who took Podo?
+              </h2>
+              <p className="text-xs text-[var(--muted)] sm:text-sm">
+                An algorithmic suspicion ranking built from co-location,
+                co-mentions, anonymous tips, and last-seen proximity.
+              </p>
+            </div>
+            <Badge tone="rose">
+              {suspectAnalysis.suspects.length} ranked
+            </Badge>
+          </div>
+
+          <SuspectBoard
+            analysis={suspectAnalysis}
+            personColors={personColorMap}
+            onSelectSuspect={focusSuspectOnMap}
+            onInspectEvent={pinpointEvent}
+          />
         </section>
       </main>
 
