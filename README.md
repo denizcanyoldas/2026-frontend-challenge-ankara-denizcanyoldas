@@ -45,8 +45,6 @@ JOTFORM_API_KEY=your_api_key_here
 # JOTFORM_FORM_ANON_TIPS=261065875889981
 ```
 
-Keys are only read server-side. Do not commit `.env.local`.
-
 ### 3) Run
 ```bash
 npm run dev
