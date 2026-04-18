@@ -8,55 +8,138 @@ import {
   stringifyLoose,
 } from "@/lib/normalize/utils";
 
+type JotformAnswer = {
+  name?: string;
+  text?: string;
+  type?: string;
+  answer?: unknown;
+};
+
+const NAME_HINTS = [
+  "fullname",
+  "full_name",
+  "name",
+  "yourname",
+  "personname",
+  "contactname",
+  "submittername",
+];
+
+const LOCATION_HINTS = [
+  "location",
+  "address",
+  "place",
+  "where",
+  "city",
+  "locationofsighting",
+  "sightinglocation",
+];
+
+const MESSAGE_HINTS = [
+  "message",
+  "note",
+  "notes",
+  "details",
+  "description",
+  "tip",
+  "comment",
+  "comments",
+  "text",
+  "body",
+];
+
+function hintMatches(hints: string[], key?: string): boolean {
+  if (!key) return false;
+  const k = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return hints.some((h) => k.includes(h));
+}
+
+function stringifyAnswer(a: unknown): string | null {
+  if (a == null) return null;
+  if (typeof a === "string") return a.trim() || null;
+  if (typeof a === "number" || typeof a === "boolean") return String(a);
+
+  if (Array.isArray(a)) {
+    const parts = a.map((x) => stringifyAnswer(x)).filter(Boolean) as string[];
+    return parts.length ? parts.join(", ") : null;
+  }
+
+  if (typeof a === "object") {
+    const obj = a as Record<string, unknown>;
+    // Jotform "fullname" answer shape
+    if (obj.first || obj.last) {
+      const first = typeof obj.first === "string" ? obj.first : "";
+      const last = typeof obj.last === "string" ? obj.last : "";
+      const joined = `${first} ${last}`.trim();
+      if (joined) return joined;
+    }
+    // Jotform "address" answer shape
+    if (obj.addr_line1 || obj.city || obj.state || obj.country) {
+      const parts = [
+        obj.addr_line1,
+        obj.addr_line2,
+        obj.city,
+        obj.state,
+        obj.postal,
+        obj.country,
+      ]
+        .filter((p) => typeof p === "string" && p.trim())
+        .map((p) => (p as string).trim());
+      if (parts.length) return parts.join(", ");
+    }
+    const deep = pickFirstStringDeep(a);
+    return deep ?? null;
+  }
+
+  return null;
+}
+
+function getAnswers(raw: Record<string, unknown>): JotformAnswer[] {
+  const answers = raw.answers;
+  if (!answers || typeof answers !== "object") return [];
+  return Object.values(answers as Record<string, unknown>)
+    .filter((v): v is JotformAnswer => !!v && typeof v === "object");
+}
+
+function pickByHints(
+  answers: JotformAnswer[],
+  hints: string[]
+): string | null {
+  for (const ans of answers) {
+    if (hintMatches(hints, ans.name) || hintMatches(hints, ans.text)) {
+      const v = stringifyAnswer(ans.answer);
+      if (v) return v;
+    }
+  }
+  return null;
+}
+
 function parseCreatedAt(raw: Record<string, unknown>): string {
-  const candidates: unknown[] = [
-    raw.created_at,
-    raw.createdAt,
-    raw.updated_at,
-    raw.updatedAt,
-    raw.submitted_at,
-    raw.submittedAt,
-    raw["created at"],
-    raw["createdAt"],
-  ];
-
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim()) return c;
-    if (typeof c === "number") return new Date(c * 1000).toISOString();
-  }
-
-  const maybe = pickFirstStringDeep(raw);
-  if (maybe) {
-    const d = new Date(maybe);
+  const c =
+    (typeof raw.created_at === "string" && raw.created_at) ||
+    (typeof raw.updated_at === "string" && raw.updated_at) ||
+    null;
+  if (c) {
+    // Jotform format: "YYYY-MM-DD HH:mm:ss" — convert to ISO-ish
+    const asIso = c.replace(" ", "T");
+    const d = new Date(asIso);
     if (!Number.isNaN(d.getTime())) return d.toISOString();
+    return c;
   }
-
   return new Date(0).toISOString();
 }
 
-function findAnswersContainer(raw: Record<string, unknown>): unknown {
-  return (
-    raw.answers ??
-    raw.content ??
-    raw.submission ??
-    raw.data ??
-    raw
-  );
-}
-
-function derivePersonLabel(raw: Record<string, unknown>): string {
-  const answers = findAnswersContainer(raw);
-  const candidate =
-    pickFirstStringDeep((asRecord(answers)?.name ?? null) as unknown) ??
-    pickFirstStringDeep((asRecord(answers)?.fullName ?? null) as unknown) ??
-    pickFirstStringDeep((asRecord(raw)?.name ?? null) as unknown) ??
-    pickFirstStringDeep(answers);
-
-  if (candidate) return candidate.slice(0, 120);
+function derivePersonLabel(answers: JotformAnswer[]): string {
+  const hit = pickByHints(answers, NAME_HINTS);
+  if (hit) return hit.slice(0, 120);
   return "Unknown";
 }
 
-function derivePersonKey(raw: Record<string, unknown>, label: string): string {
+function derivePersonKey(
+  raw: Record<string, unknown>,
+  answers: JotformAnswer[],
+  label: string
+): string {
   if (label && label !== "Unknown") return normalizePersonKey(label);
 
   const text = stringifyLoose(raw);
@@ -65,27 +148,38 @@ function derivePersonKey(raw: Record<string, unknown>, label: string): string {
   const phone = extractPhone(text);
   if (phone) return `phone:${normalizePersonKey(phone)}`;
 
+  // Use any fallback answer text
+  const any = answers.map((a) => stringifyAnswer(a.answer)).find(Boolean);
+  if (any) return normalizePersonKey(any);
+
   return "unknown";
 }
 
-function deriveLocation(raw: Record<string, unknown>): string | undefined {
-  const answers = findAnswersContainer(raw);
-  const loc =
-    pickFirstStringDeep((asRecord(answers)?.location ?? null) as unknown) ??
-    pickFirstStringDeep((asRecord(answers)?.address ?? null) as unknown) ??
-    pickFirstStringDeep((asRecord(raw)?.location ?? null) as unknown);
-  return loc ?? undefined;
+function deriveLocation(answers: JotformAnswer[]): string | undefined {
+  const hit = pickByHints(answers, LOCATION_HINTS);
+  return hit ? hit.slice(0, 160) : undefined;
 }
 
-function deriveSummary(source: SourceKind, raw: Record<string, unknown>): string {
-  const answers = findAnswersContainer(raw);
-  const short =
-    pickFirstStringDeep((asRecord(answers)?.message ?? null) as unknown) ??
-    pickFirstStringDeep((asRecord(answers)?.note ?? null) as unknown) ??
-    pickFirstStringDeep((asRecord(answers)?.details ?? null) as unknown) ??
-    pickFirstStringDeep((asRecord(answers)?.text ?? null) as unknown);
+function deriveSummary(
+  source: SourceKind,
+  answers: JotformAnswer[]
+): string {
+  const hit = pickByHints(answers, MESSAGE_HINTS);
+  if (hit) return hit.slice(0, 200);
 
-  if (short) return short.slice(0, 160);
+  // Fallback: take the first non-name, non-location answer
+  for (const a of answers) {
+    if (
+      hintMatches(NAME_HINTS, a.name) ||
+      hintMatches(NAME_HINTS, a.text) ||
+      hintMatches(LOCATION_HINTS, a.name) ||
+      hintMatches(LOCATION_HINTS, a.text)
+    ) {
+      continue;
+    }
+    const v = stringifyAnswer(a.answer);
+    if (v) return v.slice(0, 200);
+  }
 
   switch (source) {
     case "checkins":
@@ -108,36 +202,24 @@ export function normalizeSubmissionToEvent(
   const raw = asRecord(submission);
   if (!raw) return null;
 
+  const answers = getAnswers(raw);
+
   const id =
     (typeof raw.id === "string" && raw.id) ||
-    (typeof raw.submissionID === "string" && raw.submissionID) ||
     (typeof raw.submission_id === "string" && raw.submission_id) ||
-    (typeof raw.sid === "string" && raw.sid) ||
     "";
 
   const createdAt = parseCreatedAt(raw);
-  const personLabel = derivePersonLabel(raw);
-  const personKey = derivePersonKey(raw, personLabel);
-  const location = deriveLocation(raw);
-  const summary = deriveSummary(source, raw);
+  const personLabel = derivePersonLabel(answers);
+  const personKey = derivePersonKey(raw, answers, personLabel);
+  const location = deriveLocation(answers);
+  const summary = deriveSummary(source, answers);
 
-  if (!id) {
-    // Stable-ish fallback. Jotform submissions should normally have an id.
-    const hashBase = `${source}:${createdAt}:${personKey}:${summary}`;
-    return {
-      id: hashBase,
-      source,
-      createdAt,
-      personKey,
-      personLabel,
-      location,
-      summary,
-      raw: submission,
-    };
-  }
+  const finalId =
+    id || `${source}:${createdAt}:${personKey}:${summary.slice(0, 32)}`;
 
   return {
-    id,
+    id: finalId,
     source,
     createdAt,
     personKey,
@@ -147,4 +229,3 @@ export function normalizeSubmissionToEvent(
     raw: submission,
   };
 }
-

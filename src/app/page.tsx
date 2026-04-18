@@ -9,10 +9,32 @@ import { groupPeople, eventsForPerson } from "@/lib/linking/group";
 import { EventItem, PersonGroup, SourceKind } from "@/lib/types";
 import { SOURCES } from "@/lib/sources";
 
+type SourceStatus = {
+  source: SourceKind;
+  formId: string | null;
+  count: number;
+  error?: string;
+};
+
+type AllResponse = {
+  sources: SourceStatus[];
+  count: number;
+  events: EventItem[];
+};
+
+const SOURCE_LABEL: Record<SourceKind, string> = {
+  checkins: "Checkins",
+  messages: "Messages",
+  sightings: "Sightings",
+  personal_notes: "Personal Notes",
+  anon_tips: "Anonymous Tips",
+};
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [sourceStatus, setSourceStatus] = useState<SourceStatus[]>([]);
 
   const [query, setQuery] = useState("");
   const [selectedPersonKey, setSelectedPersonKey] = useState<string | null>(
@@ -23,32 +45,39 @@ export default function Home() {
   const [locationFilter, setLocationFilter] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "timeline">("list");
 
-  useEffect(() => {
-    let alive = true;
+  async function load() {
     setLoading(true);
     setError(null);
+    try {
+      const r = await fetch("/api/jotform/all", { cache: "no-store" });
+      const text = await r.text();
+      let data: AllResponse | { error: string } | null = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
 
-    fetch("/api/jotform/all")
-      .then(async (r) => {
-        if (!r.ok) throw new Error(await r.text());
-        return r.json() as Promise<{ events: EventItem[] }>;
-      })
-      .then((data) => {
-        if (!alive) return;
-        setEvents(Array.isArray(data.events) ? data.events : []);
-      })
-      .catch((e) => {
-        if (!alive) return;
-        setError(e instanceof Error ? e.message : "Failed to load data");
-      })
-      .finally(() => {
-        if (!alive) return;
-        setLoading(false);
-      });
+      if (!r.ok) {
+        const msg =
+          data && "error" in data && data.error
+            ? data.error
+            : `Request failed (${r.status})`;
+        throw new Error(msg);
+      }
 
-    return () => {
-      alive = false;
-    };
+      const payload = data as AllResponse | null;
+      setEvents(payload?.events ?? []);
+      setSourceStatus(payload?.sources ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
   }, []);
 
   const people: PersonGroup[] = useMemo(() => {
@@ -76,58 +105,131 @@ export default function Home() {
     return selectedEvents.find((e) => e.id === selectedEventId) ?? null;
   }, [selectedEvents, selectedEventId]);
 
+  const sourceErrors = sourceStatus.filter((s) => s.error);
+  const totalSourceCount = sourceStatus.reduce((acc, s) => acc + s.count, 0);
+
   return (
     <div className="flex flex-1 flex-col">
-      <header className="sticky top-0 z-10 border-b border-[var(--card-border)] bg-[var(--app-bg)]/70 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-[var(--card-border)] bg-white/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl bg-indigo-600 text-white shadow-[var(--shadow-sm)]">
-              JP
+            <div className="hero-gradient grid size-9 place-items-center rounded-xl text-sm font-bold text-white shadow-[var(--shadow-sm)]">
+              MP
             </div>
             <div className="leading-tight">
-              <div className="text-sm font-semibold tracking-tight">
-                Missing Podo: The Ankara Case
+              <div className="text-sm font-semibold tracking-tight text-[var(--navy-900)]">
+                Missing Podo:{" "}
+                <span className="text-gradient">The Ankara Case</span>
               </div>
               <div className="text-xs text-[var(--muted)]">
-                Investigation dashboard (core)
+                Investigation dashboard
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge>Jotform data</Badge>
+            <Badge tone="navy">{events.length} events</Badge>
+            <Button
+              variant="ghost"
+              onClick={load}
+              disabled={loading}
+              aria-label="Refresh data"
+            >
+              {loading ? "Loading…" : "Refresh"}
+            </Button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6">
-        <section className="rounded-[var(--radius)] border border-[var(--card-border)] bg-[var(--card)] shadow-[var(--shadow)]">
-          <div className="flex flex-col gap-2 px-6 py-6 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Investigation UI
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
-                We’ll connect to your Jotform data sources next. This shell is
-                intentionally styled to be close to Jotform’s cards, borders,
-                and spacing.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="primary">
-                Investigation
-              </Button>
-              <Button variant="secondary" disabled>
-                Data
-              </Button>
+        <section className="overflow-hidden rounded-[var(--radius)] border border-[var(--card-border)] shadow-[var(--shadow)]">
+          <div className="hero-gradient relative px-6 py-8 text-white">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="max-w-2xl">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-medium ring-1 ring-white/25 backdrop-blur">
+                    Jotform Frontend Challenge
+                  </span>
+                  <span className="rounded-full bg-[var(--orange-500)]/95 px-3 py-1 text-xs font-semibold">
+                    3 HOURS
+                  </span>
+                </div>
+                <h1 className="text-3xl font-semibold tracking-tight">
+                  Investigation UI
+                </h1>
+                <p className="mt-2 max-w-xl text-sm text-white/80">
+                  Follow the chain of Podo&apos;s last sightings across five
+                  Jotform data sources. Linked records, filters, details, and a
+                  timeline — all in one place.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="orange">Investigation</Button>
+                <button className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/15">
+                  Map &amp; Data
+                </button>
+              </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-px bg-[var(--card-border)] sm:grid-cols-5">
+            {SOURCES.map((s) => {
+              const status = sourceStatus.find((x) => x.source === s.key);
+              const count = status?.count ?? 0;
+              const err = status?.error;
+              return (
+                <div key={s.key} className="flex flex-col gap-1 bg-white p-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+                    {s.label}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-[var(--navy-900)]">
+                      {count}
+                    </span>
+                    {err ? (
+                      <Badge tone="rose">error</Badge>
+                    ) : count > 0 ? (
+                      <Badge tone="orange">records</Badge>
+                    ) : (
+                      <Badge tone="neutral">empty</Badge>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
+
+        {error ? (
+          <div className="rounded-[var(--radius)] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <div className="font-semibold">Failed to load data</div>
+            <div className="mt-0.5 break-words">{error}</div>
+          </div>
+        ) : null}
+
+        {sourceErrors.length > 0 ? (
+          <div className="rounded-[var(--radius)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="font-semibold">
+              Partial data: {sourceErrors.length} source
+              {sourceErrors.length === 1 ? "" : "s"} failed
+            </div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {sourceErrors.map((s) => (
+                <li key={s.source}>
+                  <span className="font-medium">
+                    {SOURCE_LABEL[s.source]}
+                  </span>
+                  : {s.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="lg:col-span-3">
             <Card
               title="People"
-              right={<Badge tone="indigo">{people.length}</Badge>}
+              right={<Badge tone="navy">{people.length}</Badge>}
             >
               <div className="mb-3">
                 <Input
@@ -139,14 +241,19 @@ export default function Home() {
               </div>
 
               {loading ? (
-                <div className="p-2 text-sm text-[var(--muted)]">Loading…</div>
-              ) : error ? (
-                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-200">
-                  {error}
+                <div className="space-y-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-12 animate-pulse rounded-xl border border-[var(--card-border)] bg-[rgba(19,48,107,0.04)]"
+                    />
+                  ))}
                 </div>
               ) : people.length === 0 ? (
-                <div className="p-2 text-sm text-[var(--muted)]">
-                  No people found.
+                <div className="rounded-xl border border-dashed border-[var(--card-border)] bg-white p-4 text-sm text-[var(--muted)]">
+                  {totalSourceCount === 0
+                    ? "No data returned from any source. Check API key and form IDs."
+                    : "No people match your search."}
                 </div>
               ) : (
                 <div className="max-h-[62vh] overflow-auto pr-1">
@@ -157,10 +264,10 @@ export default function Home() {
                         <li key={p.key}>
                           <button
                             className={[
-                              "w-full rounded-xl border px-3 py-2 text-left shadow-[var(--shadow-sm)]",
+                              "w-full rounded-xl border px-3 py-2 text-left shadow-[var(--shadow-sm)] transition-colors",
                               active
-                                ? "border-indigo-200 bg-indigo-50 dark:border-indigo-400/30 dark:bg-indigo-500/10"
-                                : "border-[var(--card-border)] bg-[var(--card)] hover:bg-black/[.02] dark:hover:bg-white/[.04]",
+                                ? "border-[rgba(255,122,26,0.4)] bg-[rgba(255,122,26,0.06)]"
+                                : "border-[var(--card-border)] bg-white hover:bg-[rgba(19,48,107,0.03)]",
                             ].join(" ")}
                             onClick={() => {
                               setSelectedPersonKey(p.key);
@@ -169,14 +276,21 @@ export default function Home() {
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-semibold">
+                                <div className="truncate text-sm font-semibold text-[var(--navy-900)]">
                                   {p.label}
                                 </div>
                                 <div className="truncate text-xs text-[var(--muted)]">
                                   {p.count} record{p.count === 1 ? "" : "s"}
+                                  {p.lastSeenAt
+                                    ? ` • last ${new Date(
+                                        p.lastSeenAt
+                                      ).toLocaleDateString()}`
+                                    : ""}
                                 </div>
                               </div>
-                              <Badge tone="neutral">{p.count}</Badge>
+                              <Badge tone={active ? "orange" : "neutral"}>
+                                {p.count}
+                              </Badge>
                             </div>
                           </button>
                         </li>
@@ -194,13 +308,13 @@ export default function Home() {
               right={
                 selectedPersonKey ? (
                   <div className="flex items-center gap-2">
-                    <div className="hidden items-center gap-1 rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-1 shadow-[var(--shadow-sm)] sm:flex">
+                    <div className="flex items-center gap-1 rounded-xl border border-[var(--card-border)] bg-white p-1 shadow-[var(--shadow-sm)]">
                       <button
                         className={[
-                          "h-8 rounded-lg px-3 text-xs font-semibold",
+                          "h-8 rounded-lg px-3 text-xs font-semibold transition-colors",
                           viewMode === "list"
-                            ? "bg-indigo-600 text-white"
-                            : "text-[var(--muted)] hover:bg-black/[.03] dark:hover:bg-white/[.06]",
+                            ? "bg-[var(--navy-700)] text-white"
+                            : "text-[var(--muted)] hover:bg-[rgba(19,48,107,0.06)]",
                         ].join(" ")}
                         onClick={() => setViewMode("list")}
                       >
@@ -208,17 +322,17 @@ export default function Home() {
                       </button>
                       <button
                         className={[
-                          "h-8 rounded-lg px-3 text-xs font-semibold",
+                          "h-8 rounded-lg px-3 text-xs font-semibold transition-colors",
                           viewMode === "timeline"
-                            ? "bg-indigo-600 text-white"
-                            : "text-[var(--muted)] hover:bg-black/[.03] dark:hover:bg-white/[.06]",
+                            ? "bg-[var(--orange-500)] text-white"
+                            : "text-[var(--muted)] hover:bg-[rgba(19,48,107,0.06)]",
                         ].join(" ")}
                         onClick={() => setViewMode("timeline")}
                       >
                         Timeline
                       </button>
                     </div>
-                    <Badge tone="green">{selectedEvents.length}</Badge>
+                    <Badge tone="orange">{selectedEvents.length}</Badge>
                   </div>
                 ) : (
                   <Badge tone="neutral">Select a person</Badge>
@@ -232,7 +346,7 @@ export default function Home() {
                   onChange={(e) =>
                     setSourceFilter(e.target.value as SourceKind | "all")
                   }
-                  className="h-10 w-full rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-3 text-sm shadow-[var(--shadow-sm)]"
+                  className="h-10 w-full rounded-xl border border-[var(--card-border)] bg-white px-3 text-sm shadow-[var(--shadow-sm)] disabled:opacity-60"
                   disabled={!selectedPersonKey}
                 >
                   <option value="all">All sources</option>
@@ -253,12 +367,12 @@ export default function Home() {
               </div>
 
               {!selectedPersonKey ? (
-                <div className="p-2 text-sm text-[var(--muted)]">
-                  Choose someone from the People list to see linked records across
-                  sources.
+                <div className="rounded-xl border border-dashed border-[var(--card-border)] bg-white p-4 text-sm text-[var(--muted)]">
+                  Choose someone from the People list to see linked records
+                  across sources.
                 </div>
               ) : selectedEvents.length === 0 ? (
-                <div className="p-2 text-sm text-[var(--muted)]">
+                <div className="rounded-xl border border-dashed border-[var(--card-border)] bg-white p-4 text-sm text-[var(--muted)]">
                   No events match the current filters.
                 </div>
               ) : viewMode === "timeline" ? (
@@ -274,24 +388,26 @@ export default function Home() {
                           ) : null}
                           <button
                             className={[
-                              "w-full rounded-xl border px-3 py-3 text-left shadow-[var(--shadow-sm)]",
+                              "w-full rounded-xl border px-3 py-3 text-left shadow-[var(--shadow-sm)] transition-colors",
                               active
-                                ? "border-indigo-200 bg-indigo-50 dark:border-indigo-400/30 dark:bg-indigo-500/10"
-                                : "border-[var(--card-border)] bg-[var(--card)] hover:bg-black/[.02] dark:hover:bg-white/[.04]",
+                                ? "border-[rgba(255,122,26,0.4)] bg-[rgba(255,122,26,0.06)]"
+                                : "border-[var(--card-border)] bg-white hover:bg-[rgba(19,48,107,0.03)]",
                             ].join(" ")}
                             onClick={() => setSelectedEventId(ev.id)}
                           >
-                            <div className="absolute left-0 top-3 grid size-7 place-items-center rounded-xl border border-[var(--card-border)] bg-[var(--card)] shadow-[var(--shadow-sm)]">
-                              <span className="size-2 rounded-full bg-indigo-600" />
+                            <div className="absolute left-0 top-3 grid size-7 place-items-center rounded-xl border border-[var(--card-border)] bg-white shadow-[var(--shadow-sm)]">
+                              <span className="size-2 rounded-full bg-[var(--orange-500)]" />
                             </div>
 
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-semibold">
+                                <div className="truncate text-sm font-semibold text-[var(--navy-900)]">
                                   {ev.summary}
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                                  <Badge tone="indigo">{ev.source}</Badge>
+                                  <Badge tone="navy">
+                                    {SOURCE_LABEL[ev.source]}
+                                  </Badge>
                                   <span className="truncate">
                                     {new Date(ev.createdAt).toLocaleString()}
                                   </span>
@@ -321,20 +437,22 @@ export default function Home() {
                           <li key={ev.id}>
                             <button
                               className={[
-                                "w-full rounded-xl border px-3 py-3 text-left shadow-[var(--shadow-sm)]",
+                                "w-full rounded-xl border px-3 py-3 text-left shadow-[var(--shadow-sm)] transition-colors",
                                 active
-                                  ? "border-indigo-200 bg-indigo-50 dark:border-indigo-400/30 dark:bg-indigo-500/10"
-                                  : "border-[var(--card-border)] bg-[var(--card)] hover:bg-black/[.02] dark:hover:bg-white/[.04]",
+                                  ? "border-[rgba(255,122,26,0.4)] bg-[rgba(255,122,26,0.06)]"
+                                  : "border-[var(--card-border)] bg-white hover:bg-[rgba(19,48,107,0.03)]",
                               ].join(" ")}
                               onClick={() => setSelectedEventId(ev.id)}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="truncate text-sm font-semibold">
+                                  <div className="truncate text-sm font-semibold text-[var(--navy-900)]">
                                     {ev.summary}
                                   </div>
                                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                                    <Badge tone="indigo">{ev.source}</Badge>
+                                    <Badge tone="navy">
+                                      {SOURCE_LABEL[ev.source]}
+                                    </Badge>
                                     <span className="truncate">
                                       {new Date(ev.createdAt).toLocaleString()}
                                     </span>
@@ -360,28 +478,36 @@ export default function Home() {
             <Card
               title="Detail"
               right={
-                selectedEvent ? <Badge tone="amber">{selectedEvent.source}</Badge> : undefined
+                selectedEvent ? (
+                  <Badge tone="orange">
+                    {SOURCE_LABEL[selectedEvent.source]}
+                  </Badge>
+                ) : undefined
               }
             >
               {!selectedEvent ? (
-                <div className="p-2 text-sm text-[var(--muted)]">
+                <div className="rounded-xl border border-dashed border-[var(--card-border)] bg-white p-4 text-sm text-[var(--muted)]">
                   Select an event to see details and raw JSON.
                 </div>
               ) : (
                 <div className="space-y-3">
                   <div>
-                    <div className="text-sm font-semibold">{selectedEvent.summary}</div>
+                    <div className="text-sm font-semibold text-[var(--navy-900)]">
+                      {selectedEvent.summary}
+                    </div>
                     <div className="mt-1 text-xs text-[var(--muted)]">
                       {new Date(selectedEvent.createdAt).toLocaleString()}
-                      {selectedEvent.location ? ` • ${selectedEvent.location}` : ""}
+                      {selectedEvent.location
+                        ? ` • ${selectedEvent.location}`
+                        : ""}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-[var(--card-border)] bg-black/[.02] p-2 text-xs text-[var(--muted)] dark:bg-white/[.04]">
-                    <div className="mb-1 font-medium text-[var(--app-fg)]">
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[rgba(19,48,107,0.03)] p-2 text-xs text-[var(--muted)]">
+                    <div className="mb-1 font-medium text-[var(--navy-900)]">
                       Raw JSON
                     </div>
-                    <pre className="max-h-[44vh] overflow-auto whitespace-pre-wrap break-words">
+                    <pre className="max-h-[44vh] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[var(--navy-900)]">
                       {JSON.stringify(selectedEvent.raw, null, 2)}
                     </pre>
                   </div>
@@ -391,6 +517,11 @@ export default function Home() {
           </div>
         </section>
       </main>
+
+      <footer className="mx-auto w-full max-w-6xl px-4 py-6 text-center text-xs text-[var(--muted)]">
+        Built for the Jotform Frontend Challenge · Data via{" "}
+        <span className="text-gradient font-semibold">Jotform API</span>
+      </footer>
     </div>
   );
 }

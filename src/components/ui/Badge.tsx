@@ -5,18 +5,18 @@ export function Badge({
   tone = "neutral",
 }: {
   children: ReactNode;
-  tone?: "neutral" | "indigo" | "green" | "amber" | "rose";
+  tone?: "neutral" | "navy" | "orange" | "green" | "rose";
 }) {
   const toneClass =
-    tone === "indigo"
-      ? "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:text-indigo-200"
-      : tone === "green"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-        : tone === "amber"
-          ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200"
+    tone === "navy"
+      ? "border-[rgba(19,48,107,0.15)] bg-[rgba(19,48,107,0.06)] text-[var(--navy-700)]"
+      : tone === "orange"
+        ? "border-[rgba(255,122,26,0.25)] bg-[rgba(255,122,26,0.08)] text-[#b2530f]"
+        : tone === "green"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : tone === "rose"
-            ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-200"
-            : "border-[var(--card-border)] bg-[var(--card)] text-[var(--muted)]";
+            ? "border-rose-200 bg-rose-50 text-rose-700"
+            : "border-[var(--card-border)] bg-white text-[var(--muted)]";
 
   return (
     <span
@@ -29,4 +29,3 @@ export function Badge({
     </span>
   );
 }
-
