@@ -423,7 +423,7 @@ export default function MapView({
   ]);
 
   return (
-    <div className="relative">
+    <div className="relative isolate z-0">
       <div
         ref={containerRef}
         className="overflow-hidden rounded-[var(--radius-sm)] border border-[var(--card-border)] bg-white shadow-[var(--shadow-sm)]"

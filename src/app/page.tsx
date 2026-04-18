@@ -275,7 +275,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="sticky top-0 z-10 border-b border-[var(--card-border)] bg-white/80 backdrop-blur">
+      <header className="sticky top-0 z-[1100] border-b border-[var(--card-border)] bg-white/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="hero-gradient grid size-9 place-items-center rounded-xl text-sm font-bold text-white shadow-[var(--shadow-sm)]">
